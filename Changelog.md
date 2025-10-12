@@ -1,3 +1,16 @@
+## 13.519.4.1
+* Backwards compatibility, fixing issues with remnant quoted parts in formulas.
+
+## 13.519.4
+* Reworked `_ac5eSafeEval`
+* Introduced new parser
+ * full ternary operators support while evaluating formulas
+ * any bonuses are folded in a final value before added to the Rolls
+* `sandbox` lazy load
+* Moved repetitive code to Functions in `ac5e-setpieces`
+* Reworked `bonus` and `set`
+* Updated Italian translation by [GregoryWarn](<https://github.com/GregoryWarn>) 🤗
+
 ## 13.519.3.1
 * Hotfix
 * Added `ac5e.info.version`

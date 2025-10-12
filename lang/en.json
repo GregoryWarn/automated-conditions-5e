@@ -187,16 +187,16 @@
 		},
 		"flags.automated-conditions-5e.aura.modifyAC": {
 			"name": "An aura modifying the AC of the relevant tokens in radius",
-			"description": "Use radius=10;bonus='1d4'; or radius=15;set=15. The former will give a bonus to AC and the latter will set to the value provided"
+			"description": "Use radius=10;bonus=1d4; or radius=15;set=15. The former will give a bonus to AC and the latter will set to the value provided"
 		},
 		"flags.automated-conditions-5e.ACTIONTYPE": {
 			"advantage": {
 				"name": "Roll with advantage",
-				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/death/initiative/save/skill/tool"
+				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/damage/death/initiative/save/skill/tool"
 			},
 			"bonus": {
 				"name": "Roll gets bonus",
-				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/damage/death/initiative/save/skill/tool. eg bonus='1d4 + 5' - rollingActor.abilities.dex.mod;"
+				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/damage/death/initiative/save/skill/tool. eg bonus=1d4 + 5 - rollingActor.abilities.dex.mod;"
 			},
 			"critical": {
 				"name": "Roll is critical (nat20 or crit damage)",
@@ -204,15 +204,15 @@
 			},
 			"disadvantage": {
 				"name": "Roll with disadvantage",
-				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/death/initiative/save/skill/tool"
+				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/damage/death/initiative/save/skill/tool"
 			},
 			"modifier": {
 				"name": "min and max modifiers for d20 rolls modifiers for max and any for damage rolls",
-				"description": "Replace ACTIONTYPE with one of: attack/check/concentration/damage/death/initiative/save/skill/tool. eg modifier=rollingActor.attributes.hp.pct < 50 ? 'max8' : 'min12'"
+				"description": "Replace ACTIONTYPE with one of: attack/check/concentration/damage/death/initiative/save/skill/tool. eg modifier=(rollingActor.attributes.hp.pct < 50 ? max8 : min12)"
 			},
 			"modifyDC": {
 				"name": "Modify the DC of your actions. Will work for concentation checks and death saves you make too",
-				"description": "Replace ACTIONTYPE with one of: save/conc/death (check/skill/tool are supported but usually they don't have DC set). Use bonus=5 to add 5 to DC or set=15 to set it to the value provided eshold=-5 to reduce by 5 or set=15 to set the value to 15. You can use roll data, dice formulas and evaluate conditions too."
+				"description": "Replace ACTIONTYPE with one of: save/conc/death (check/skill/tool are supported but usually they don't have DC set). Use bonus=5 to add 5 to DC or set=15 to set it to the value provided threshold=-5 to reduce by 5 or set=15 to set the value to 15. You can use roll data, dice formulas and evaluate conditions too."
 			},
 			"fail": {
 				"name": "d20 rolls fail",
@@ -230,7 +230,7 @@
 		"flags.automated-conditions-5e.grants.ACTIONTYPE": {
 			"advantage": {
 				"name": "Grant advantage to opponent's d20 rolls",
-				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/death/initiative/save/skill/tool"
+				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/damage/death/initiative/save/skill/tool"
 			},
 			"bonus": {
 				"name": "Grant bonus to opponent's rolls",
@@ -242,11 +242,11 @@
 			},
 			"disadvantage": {
 				"name": "Grant disadvantage to opponent's d20 rolls",
-				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/death/initiative/save/skill/tool"
+				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/damage/death/initiative/save/skill/tool"
 			},
 			"modifier": {
 				"name": "Grant min and max modifiers for d20 rolls modifiers for max and any for damage rolls",
-				"description": "Replace ACTIONTYPE with one of: attack/check/concentration/damage/death/initiative/save/skill/tool. eg modifier='min10'"
+				"description": "Replace ACTIONTYPE with one of: attack/check/concentration/damage/death/initiative/save/skill/tool. eg modifier=min10"
 			},
 			"modifyDC": {
 				"name": "Modify the DC of a roll you make against an action taken by another",
@@ -268,7 +268,7 @@
 		"flags.automated-conditions-5e.aura.ACTIONTYPE": {
 			"advantage": {
 				"name": "An aura giving advantage",
-				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/death/initiative/save/skill/tool. Change value format example for a save ACTIONTYPE and: radius=15;includeSelf;allies;str;cha; would give to all allies including self in 15ft radius advantage to strength or charisma saves."
+				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/damage/death/initiative/save/skill/tool. Change value format example for a save ACTIONTYPE and: radius=15;includeSelf;allies;str;cha; would give to all allies including self in 15ft radius advantage to strength or charisma saves."
 			},
 			"bonus": {
 				"name": "An aura giving bonuses",
@@ -280,11 +280,11 @@
 			},
 			"disadvantage": {
 				"name": "An aura giving disadvantage",
-				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/death/initiative/save/skill/tool. Change value format: radius=Number;allies or enemies or omit for ALL;other conditions"
+				"description": "Replace ACTIONTYPE with one of: all/attack/check/concentration/damage/death/initiative/save/skill/tool. Change value format: radius=Number;allies or enemies or omit for ALL;other conditions"
 			},
 			"modifier": {
 				"name": "An aura giving min and max modifiers for d20 rolls modifiers for max and any for damage rolls",
-				"description": "Replace ACTIONTYPE with one of: attack/check/concentration/damage/death/initiative/save/skill/tool. eg modifier='min10'; radius=rollingActor.details.level < 10 ? 15 : 30; modifier='min10'"
+				"description": "Replace ACTIONTYPE with one of: attack/check/concentration/damage/death/initiative/save/skill/tool. eg modifier=min10; radius=(rollingActor.details.level < 10 ? 15 : 30); modifier=min10"
 			},
 			"modifyDC": {
 				"name": "An aura that modifies the DC of actions the affected tokens take.",
