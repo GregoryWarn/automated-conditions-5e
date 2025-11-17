@@ -11,10 +11,11 @@ const settings = new Settings();
  * Gets the minimum distance between two tokens,
  * evaluating perimeter grid spaces they occupy and checking for walls blocking.
  */
-export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi = false, checkCollision = false, includeHeight = true) {
+export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi = true, checkCollision = false, includeHeight = true) {
 	let totalDistance = Infinity;
+	const meleeDiagonals = settings.autoRangeChecks.has('meleeDiagonals');
 
-	const tokenInstance = game.version > 13 ? foundry.canvas.placeables.Token : Token;
+	const tokenInstance = foundry.canvas.placeables.Token;
 	if (typeof tokenA === 'string') {
 		if (tokenA.includes('.')) tokenA = fromUuidSync(tokenA)?.object;
 		else tokenA = canvas.tokens.get(tokenA);
@@ -25,20 +26,21 @@ export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi 
 	}
 	if (!(tokenA instanceof tokenInstance) || !(tokenB instanceof tokenInstance)) return totalDistance;
 
+	const { grid } = canvas || {};
+	if (foundry.utils.isEmpty(grid)) return totalDistance;
+	const { size, sizeX, sizeY, diagonals: gridDiagonals, distance: gridDistance, units, isGridless, isHexagonal, isSquare } = grid;
+
 	if (_activeModule('midi-qol') && !overrideMidi) {
 		const result = MidiQOL.computeDistance(tokenA, tokenB);
-		if (settings.debug) console.log(`${Constants.MODULE_NAME_SHORT} - Defer to MidiQOL.computeDistance():`, { sourceId: tokenA?.id, targetId: tokenB?.id, result, units: canvas.scene.grid.units });
-		if (includeUnits) return result + (includeUnits ? canvas.scene.grid.units : '');
+		if (settings.debug) console.log(`${Constants.MODULE_NAME_SHORT} - Defer to MidiQOL.computeDistance():`, { sourceId: tokenA?.id, targetId: tokenB?.id, result, units });
+		if (includeUnits) return result + (includeUnits ? units : '');
 		if (result === -1) return totalDistance;
 		return result;
 	}
 
-	const { grid } = canvas || {};
-	if (!grid) return totalDistance;
-	const { grid: { size, sizeX, sizeY, diagonals: gridDiagonals, distance: gridDistance } = {} } = canvas || {};
 	let diagonals, spaces;
 
-	if (grid.isHexagonal) {
+	if (isHexagonal) {
 		const tokenAHexes = getHexesOnPerimeter(tokenA);
 		if (settings.debug) tokenAHexes.forEach((e) => canvas.ping(e));
 		const tokenBHexes = getHexesOnPerimeter(tokenB);
@@ -55,11 +57,19 @@ export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi 
 					})
 				)
 					continue;
-				const { distance: distance2D, diagonals: pathDiagonals, spaces: pathSpaces } = grid.measurePath([pointA, pointB]);
-				if (distance2D < totalDistance) {
-					totalDistance = distance2D;
-					diagonals = pathDiagonals;
-					spaces = pathSpaces;
+				const isAdjacent = canvas.grid.testAdjacency(canvas.grid.getOffset(pointA), canvas.grid.getOffset(pointB));
+				if (isAdjacent && meleeDiagonals) {
+					totalDistance = gridDistance;
+					diagonals = 0;
+					spaces = 1;
+					break;
+				} else {
+					const { distance: distance2D, diagonals: pathDiagonals, spaces: pathSpaces } = grid.measurePath([pointA, pointB]);
+					if (distance2D < totalDistance) {
+						totalDistance = distance2D;
+						diagonals = pathDiagonals;
+						spaces = pathSpaces;
+					}
 				}
 			}
 		}
@@ -69,7 +79,7 @@ export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi 
 			totalDistance = 0;
 			diagonals = 0;
 			spaces = 0;
-		} else if (grid.isGridless) {
+		} else if (isGridless) {
 			const tokenASquares = getGridlessSquaresOnPerimeter(tokenA);
 			if (settings.debug) tokenASquares.forEach((s) => canvas.ping(s));
 			const tokenBSquares = getGridlessSquaresOnPerimeter(tokenB);
@@ -87,14 +97,14 @@ export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi 
 						continue;
 					const { distance: distance2D, diagonals: pathDiagonals, spaces: pathSpaces } = grid.measurePath([pointA, pointB]);
 					if (distance2D < totalDistance) {
-						const leeway = settings.autoRangedCombined !== 'off' ? gridDistance * 1.25 : false; //@to-do: offer a setting to turn on and set to user choice.
+						const leeway = settings.autoRangeChecks.has('meleeOoR') ? gridDistance * 2 : false; //@to-do: offer a setting to turn on and set to user choice.
 						totalDistance = leeway && distance2D <= leeway ? gridDistance : distance2D;
 						diagonals = pathDiagonals;
 						spaces = pathSpaces;
 					}
 				}
 			}
-		} else if (grid.isSquare) {
+		} else if (isSquare) {
 			//const tokensIntersection = tokenA.bounds.intersection(tokenB.bounds);
 			const tokenASquares = getSquaresOnPerimeter(tokenA);
 			if (settings.debug) tokenASquares.forEach((s) => canvas.ping(s));
@@ -111,11 +121,19 @@ export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi 
 						})
 					)
 						continue;
-					const { distance: distance2D, diagonals: pathDiagonals, spaces: pathSpaces } = grid.measurePath([pointA, pointB]);
-					if (distance2D < totalDistance) {
-						totalDistance = distance2D;
-						diagonals = pathDiagonals;
-						spaces = pathSpaces;
+					const isAdjacent = canvas.grid.testAdjacency(canvas.grid.getOffset(pointA), canvas.grid.getOffset(pointB));
+					if (isAdjacent && meleeDiagonals) {
+						totalDistance = gridDistance;
+						diagonals = 0;
+						spaces = 1;
+						break;
+					} else {
+						const { distance: distance2D, diagonals: pathDiagonals, spaces: pathSpaces } = grid.measurePath([pointA, pointB]);
+						if (distance2D < totalDistance) {
+							totalDistance = distance2D;
+							diagonals = pathDiagonals;
+							spaces = pathSpaces;
+						}
 					}
 				}
 			}
@@ -123,23 +141,21 @@ export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi 
 	}
 
 	if (includeHeight) totalDistance = heightDifference(tokenA, tokenB, totalDistance, diagonals, spaces, grid);
-	if (settings.debug) console.log(`${Constants.MODULE_NAME_SHORT} - getDistance():`, { sourceId: tokenA.id, opponentId: tokenB.id, result: totalDistance, units: canvas.scene.grid.units });
-	if (includeUnits) return ((totalDistance * 100) | 0) / 100 + grid.units;
+	if (settings.debug) console.log(`${Constants.MODULE_NAME_SHORT} - getDistance():`, { sourceId: tokenA.id, opponentId: tokenB.id, result: totalDistance, units });
+	if (includeUnits) return ((totalDistance * 100) | 0) / 100 + units;
 	return ((totalDistance * 100) | 0) / 100;
 }
 
 function heightDifference(tokenA, tokenB, totalDistance, diagonals, spaces, grid) {
 	tokenA.z0 = (tokenA.document.elevation / grid.distance) | 0;
-	tokenA.z1 = tokenA.z0 + Math.min(tokenA.document.width | 0, tokenA.document.height | 0);
+	tokenA.z1 = tokenA.z0 + Math.max(1, Math.min(tokenA.document.width | 0, tokenA.document.height | 0));
 	tokenB.z0 = (tokenB.document.elevation / grid.distance) | 0;
-	tokenB.z1 = tokenB.z0 + Math.min(tokenB.document.width | 0, tokenB.document.height | 0);
+	tokenB.z1 = tokenB.z0 + Math.max(1, Math.min(tokenB.document.width | 0, tokenB.document.height | 0));
 	const dz = tokenB.z0 >= tokenA.z1 ? tokenB.z0 - tokenA.z1 + 1 : tokenA.z0 >= tokenB.z1 ? tokenA.z0 - tokenB.z1 + 1 : 0;
-	const versionTest = (grid.isGridless && 'nogrid') || (grid.isHexagonal && game.version < 13 && 'v12hex');
-	if (versionTest === 'nogrid') {
+	if (grid.isGridless) {
 		const verticalDistance = dz * grid.distance;
 		totalDistance = dz ? Math.sqrt(totalDistance * totalDistance + verticalDistance * verticalDistance) : totalDistance;
-	} else if (versionTest === 'v12hex') totalDistance += dz * grid.distance;
-	else totalDistance = dz ? calculateDiagonalsZ(diagonals, dz, spaces, totalDistance, grid) : totalDistance;
+	} else totalDistance = dz ? calculateDiagonalsZ(diagonals, dz, spaces, totalDistance, grid) : totalDistance;
 	return totalDistance;
 }
 
@@ -337,30 +353,38 @@ export function _calcAdvantageMode(ac5eConfig, config, dialog, message) {
 	config.rolls[0] ??= {};
 	const roll0 = config.rolls[0];
 	roll0.options ??= {};
-	dialog.options.defaultButton = 'normal';
 	const hook = ac5eConfig.hookType;
 	const ac5eForcedRollTarget = 999;
 	if (hook === 'damage') {
 		if (ac5eConfig.subject.critical.length || ac5eConfig.opponent.critical.length) {
 			ac5eConfig.isCritical = true;
+			config.isCritical = true; // does this break something? added back to properly focus on button
 			dialog.options.defaultButton = 'critical';
 		}
 	} else {
 		if (ac5eConfig.subject.advantage.length || ac5eConfig.opponent.advantage.length || ac5eConfig.subject.advantageNames.size || ac5eConfig.opponent.advantageNames.size) {
 			config.advantage = true;
-			dialog.options.advantageMode = ADV_MODE;
-			dialog.options.defaultButton = 'advantage';
+		}
+		if (ac5eConfig.subject.noAdvantage.length || ac5eConfig.opponent.noAdvantage.length) {
+			config.advantage = false;
 		}
 		if (ac5eConfig.subject.disadvantage.length || ac5eConfig.opponent.disadvantage.length || ac5eConfig.subject.disadvantageNames.size || ac5eConfig.opponent.disadvantageNames.size) {
 			config.disadvantage = true;
-			dialog.options.advantageMode = DIS_MODE;
-			dialog.options.defaultButton = 'disadvantage';
 		}
-		if (config.advantage === config.disadvantage) {
-			config.advantage = false;
+		if (ac5eConfig.subject.noDisadvantage.length || ac5eConfig.opponent.noDisadvantage.length) {
 			config.disadvantage = false;
+		}
+		if (config.advantage && config.disadvantage) {
+			config.advantage = true; // both true let system handle it
+			config.disadvantage = true; // both true let system handle it
 			dialog.options.advantageMode = NORM_MODE;
 			dialog.options.defaultButton = 'normal';
+		} else if (config.advantage && !config.disadvantage) {
+			dialog.options.advantageMode = ADV_MODE;
+			dialog.options.defaultButton = 'advantage';
+		} else if (!config.advantage && config.disadvantage) {
+			dialog.options.advantageMode = DIS_MODE;
+			dialog.options.defaultButton = 'disadvantage';
 		}
 		if (hook === 'attack' || hook === 'damage') {
 			// need to allow damage hooks too for results shown?
@@ -440,6 +464,12 @@ export function _calcAdvantageMode(ac5eConfig, config, dialog, message) {
 			}
 		}
 	}
+	if (ac5eConfig.subject.noCritical.length || ac5eConfig.opponent.noCritical.length) {
+		if (hook === 'attack') roll0.options.criticalSuccess = 21;
+		if (hook === 'damage') dialog.options.defaultButton = 'normal';
+		ac5eConfig.isCritical = false;
+		config.isCritical = false;
+	}
 	if (ac5eConfig.parts.length) {
 		if (roll0) typeof roll0.parts !== 'undefined' ? (roll0.parts = roll0.parts.concat(ac5eConfig.parts)) : (roll0.parts = [...ac5eConfig.parts]);
 		else if (config.parts) config.parts.push(ac5eConfig.parts);
@@ -450,6 +480,7 @@ export function _calcAdvantageMode(ac5eConfig, config, dialog, message) {
 		if (maximum) roll0.options.maximum = maximum;
 		if (minimum) roll0.options.minimum = minimum;
 	}
+	if (!dialog.options?.defaultButton) dialog.options.defaultButton = 'normal';
 	ac5eConfig.advantageMode = dialog.options.advantageMode;
 	ac5eConfig.defaultButton = dialog.options.defaultButton;
 	_getTooltip(ac5eConfig);
@@ -591,7 +622,8 @@ export function _autoEncumbrance(actor, abilityId) {
 	return ['con', 'dex', 'str'].includes(abilityId) && _hasStatuses(actor, 'heavilyEncumbered').length;
 }
 
-export function _autoRanged(activity, token, target) {
+export function _autoRanged(activity, token, target, options) {
+	const distanceUnit = canvas.grid.distance;
 	const modernRules = settings.dnd5eModernRules;
 	const isSpell = activity.isSpell;
 	const isAttack = activity.type === 'attack';
@@ -599,14 +631,15 @@ export function _autoRanged(activity, token, target) {
 	const { actionType, item, range } = activity || {};
 	if (!range || !token) return {};
 	let { value: short, long, reach } = range;
-	const distance = target ? _getDistance(token, target) : undefined;
+	const distance = options?.distance ?? (target ? _getDistance(token, target) : undefined);
 	const flags = token.actor?.flags?.[Constants.MODULE_ID];
 	const spellSniper = flags?.spellSniper || _hasItem(token.actor, 'AC5E.Feats.SpellSniper');
 	if (spellSniper && isSpell && isAttack && !!short) {
-		if (modernRules && short >= 10) short += 60;
+		// if (modernRules && short >= 10) short += 60;
+		if (modernRules && short >= 2 * distanceUnit) short += 12 * distanceUnit;
 		else short *= 2;
 	}
-	if (reach && ['mwak', 'msak'].includes(actionType) && !item.system.properties.has('thr')) return { inRange: distance <= reach };
+	if (settings.autoRangeChecks.has('meleeOoR') && reach && ['mwak', 'msak'].includes(actionType) && !options?.attackMode?.includes('thrown')) return { inRange: distance <= reach };
 	const sharpShooter = flags?.sharpShooter || _hasItem(token.actor, 'AC5E.Feats.Sharpshooter');
 	if (sharpShooter && long && actionType == 'rwak') short = long;
 	const crossbowExpert = flags?.crossbowExpert || _hasItem(token.actor, 'AC5E.Feats.CrossbowExpert');
@@ -614,12 +647,18 @@ export function _autoRanged(activity, token, target) {
 	const nearbyFoe =
 		!midiNearbyFoe &&
 		!['mwak', 'msak'].includes(actionType) &&
-		settings.autoRangedCombined === 'nearby' &&
-		_findNearby({ token, disposition: 'opposite', radius: 5, lengthTest: 1 }) && //hostile vs friendly disposition only
+		settings.autoRangeChecks.has('rangedNearbyFoes') &&
+		_findNearby({ token, disposition: 'opposite', radius: distanceUnit, lengthTest: 1 }) && //hostile vs friendly disposition only
 		!crossbowExpert &&
 		!(modernRules && ((isSpell && spellSniper) || (!isSpell && sharpShooter)));
-
-	const inRange = (midiCheckRange && midiCheckRange !== 'none') || (!short && !long) || distance <= short ? 'short' : distance <= long ? 'long' : false; //expect short and long being null for some items, and handle these cases as in short range.
+	let isShort, isLong, isOoR;
+	const midiChecks = midiCheckRange && midiCheckRange !== 'none'; //give priority to midi checks as it will already by included in the workflow by midi.
+	if (midiChecks || (!settings.autoRangeChecks.has('rangedOoR') && !settings.autoRangeChecks.has('rangedLongDisadvantage')) || (!short && !long) || distance <= short) isShort = true; //expect short and long being null for some items, and handle these cases as in short range.
+	if (!isShort) {
+		if (settings.autoRangeChecks.has('rangedLongDisadvantage')) isLong = distance <= long;
+		if (!isLong && !settings.autoRangeChecks.has('rangedOoR')) isLong = true;
+	}
+	const inRange = isShort ? 'short' : isLong ? 'long' : false;
 	return { inRange: !!inRange, range: inRange, distance, nearbyFoe };
 }
 
@@ -647,10 +686,13 @@ export function _getTooltip(ac5eConfig = {}) {
 		const subjectAdvantageModes = [...(subject?.advantage ?? []), ...([...subject?.advantageNames] ?? [])];
 		const subjectDisadvantageModes = [...(subject?.disadvantage ?? []), ...([...subject?.disadvantageNames] ?? [])];
 		addTooltip(subject.critical.length, `<span style="display: block; text-align: left;">${_localize('DND5E.Critical')}: ${subject.critical.join(', ')}</span>`);
+		addTooltip(subject.noCritical.length, `<span style="display: block; text-align: left;">${_localize('AC5E.NoCritical')}: ${subject.noCritical.join(', ')}</span>`);
 		addTooltip(subjectAdvantageModes.length, `<span style="display: block; text-align: left;">${_localize('DND5E.Advantage')}: ${subjectAdvantageModes.join(', ')}</span>`);
+		addTooltip(subject.noAdvantage.length, `<span style="display: block; text-align: left;">${_localize('AC5E.NoAdvantage')}: ${subject.noAdvantage.join(', ')}</span>`);
 		addTooltip(subject.fail.length, `<span style="display: block; text-align: left;">${_localize('AC5E.Fail')}: ${subject.fail.join(', ')}</span>`);
 		addTooltip(subject.fumble.length, `<span style="display: block; text-align: left;">${_localize('AC5E.Fumble')}: ${subject.fumble.join(', ')}</span>`);
 		addTooltip(subjectDisadvantageModes.length, `<span style="display: block; text-align: left;">${_localize('DND5E.Disadvantage')}: ${subjectDisadvantageModes.join(', ')}</span>`);
+		addTooltip(subject.noDisadvantage.length, `<span style="display: block; text-align: left;">${_localize('AC5E.NoDisadvantage')}: ${subject.noDisadvantage.join(', ')}</span>`);
 		addTooltip(subject.success.length, `<span style="display: block; text-align: left;">${_localize('AC5E.Success')}: ${subject.success.join(', ')}</span>`);
 		addTooltip(subject.bonus.length, `<span style="display: block; text-align: left;">${_localize('AC5E.Bonus')}: ${subject.bonus.join(', ')}</span>`);
 		addTooltip(subject.modifiers.length, `<span style="display: block; text-align: left;">${_localize('DND5E.Modifier')}: ${subject.modifiers.join(', ')}</span>`);
@@ -660,9 +702,12 @@ export function _getTooltip(ac5eConfig = {}) {
 		const opponentAdvantageModes = [...(opponent?.advantage ?? []), ...([...opponent?.advantageNames] ?? [])];
 		const opponentDisadvantageModes = [...(opponent?.disadvantage ?? []), ...([...opponent?.disadvantageNames] ?? [])];
 		addTooltip(opponent.critical.length, `<span style="display: block; text-align: left;">${_localize('AC5E.TargetGrantsCriticalAbbreviated')}: ${opponent.critical.join(', ')}</span>`);
+		addTooltip(opponent.noCritical.length, `<span style="display: block; text-align: left;">${_localize('AC5E.TargetGrantsNoCritical')}: ${opponent.noCritical.join(', ')}</span>`);
 		addTooltip(opponent.fail.length, `<span style="display: block; text-align: left;">${_localize('AC5E.TargetGrantsFail')}: ${opponent.fail.join(', ')}</span>`);
 		addTooltip(opponentAdvantageModes.length, `<span style="display: block; text-align: left;">${_localize('AC5E.TargetGrantsAdvantageAbbreviated')}: ${opponentAdvantageModes.join(', ')}</span>`);
+		addTooltip(opponent.noAdvantage.length, `<span style="display: block; text-align: left;">${_localize('AC5E.TargetGrantsNoAdvantage')}: ${opponent.noAdvantage.join(', ')}</span>`);
 		addTooltip(opponentDisadvantageModes.length, `<span style="display: block; text-align: left;">${_localize('AC5E.TargetGrantsDisadvantageAbbreviated')}: ${opponentDisadvantageModes.join(', ')}</span>`);
+		addTooltip(opponent.noDisadvantage.length, `<span style="display: block; text-align: left;">${_localize('AC5E.TargetGrantsNoDisadvantage')}: ${opponent.noDisadvantage.join(', ')}</span>`);
 		addTooltip(opponent.success.length, `<span style="display: block; text-align: left;">${_localize('AC5E.TargetGrantsSuccess')}: ${opponent.success.join(', ')}</span>`);
 		addTooltip(opponent.fumble.length, `<span style="display: block; text-align: left;">${_localize('AC5E.TargetGrantsFumble')}: ${opponent.fumble.join(', ')}</span>`);
 		addTooltip(opponent.bonus.length, `<span style="display: block; text-align: left;">${_localize('AC5E.TargetGrantsBonus')}: ${opponent.bonus.join(', ')}</span>`);
@@ -706,11 +751,14 @@ export function _getConfig(config, dialog, hookType, tokenId, targetId, options 
 		subject: {
 			advantage: [],
 			advantageNames: new Set(),
+			noAdvantage: [],
 			disadvantage: [],
 			disadvantageNames: new Set(),
+			noDisadvantage: [],
 			fail: [],
 			bonus: [],
 			critical: [],
+			noCritical: [],
 			success: [],
 			fumble: [],
 			modifiers: [],
@@ -721,11 +769,14 @@ export function _getConfig(config, dialog, hookType, tokenId, targetId, options 
 		opponent: {
 			advantage: [],
 			advantageNames: new Set(),
+			noAdvantage: [],
 			disadvantage: [],
 			disadvantageNames: new Set(),
+			noDisadvantage: [],
 			fail: [],
 			bonus: [],
 			critical: [],
+			noCritical: [],
 			success: [],
 			fumble: [],
 			modifiers: [],
@@ -741,10 +792,10 @@ export function _getConfig(config, dialog, hookType, tokenId, targetId, options 
 		damageModifiers: [],
 		modifiers: {},
 		preAC5eConfig: {
-			advKey: hookType !== 'damage' ? areKeysPressed(config.event, 'skipDialogAdvantage') : false,
-			disKey: hookType !== 'damage' ? areKeysPressed(config.event, 'skipDialogDisadvantage') : false,
-			critKey: hookType === 'damage' ? areKeysPressed(config.event, 'skipDialogAdvantage') : false,
-			fastForward: hookType !== 'damage' ? areKeysPressed(config.event, 'skipDialogNormal') : hookType === 'damage' ? areKeysPressed(config.event, 'skipDialogNormal') || areKeysPressed(config.event, 'skipDialogDisadvantage') : false,
+			// fastForward: hookType !== 'damage' ? areKeysPressed(config.event, 'skipDialogNormal') : hookType === 'damage' ? areKeysPressed(config.event, 'skipDialogNormal') || areKeysPressed(config.event, 'skipDialogDisadvantage') : false,
+			skipDialogAdvantage: areKeysPressed(config.event, 'skipDialogAdvantage'),
+			skipDialogDisadvantage: areKeysPressed(config.event, 'skipDialogDisadvantage'),
+			skipDialogNormal: areKeysPressed(config.event, 'skipDialogNormal'),
 		},
 		returnEarly: false,
 	};
@@ -752,58 +803,108 @@ export function _getConfig(config, dialog, hookType, tokenId, targetId, options 
 	const wasCritical = config.isCritical || ac5eConfig.preAC5eConfig.midiOptions?.isCritical || ac5eConfig.preAC5eConfig.critKey;
 	ac5eConfig.preAC5eConfig.wasCritical = wasCritical;
 	if (options.skill || options.tool) ac5eConfig.title = dialog?.options?.window?.title;
-	const roller = _activeModule('midi-qol') ? 'MidiQOL' : _activeModule('ready-set-roll-5e') ? 'RSR' : 'Core';
-	if (_activeModule('midi-qol')) ac5eConfig.preAC5eConfig.midiOptions = foundry.utils.duplicate(config.midiOptions || {}); //otherwise Error: Cannot set property isTrusted of #<PointerEvent> which has only a getter
+	const midiRoller = _activeModule('midi-qol');
+	const rsrRoller = _activeModule('ready-set-roll-5e');
+	const roller = midiRoller ? 'MidiQOL' : rsrRoller ? 'RSR' : 'Core';
+	if (midiRoller) ac5eConfig.preAC5eConfig.midiOptions = foundry.utils.duplicate(config.midiOptions || {}); //otherwise Error: Cannot set property isTrusted of #<PointerEvent> which has only a getter
 	ac5eConfig.roller = roller;
 	ac5eConfig.preAC5eConfig.adv = config.advantage;
 	ac5eConfig.preAC5eConfig.dis = config.disadvantage;
 
-	//const actorType = hookType === 'attack' ? 'subject' : 'opponent';
-	if (ac5eConfig.preAC5eConfig.advKey) {
-		ac5eConfig.subject.advantage = [`${roller} (keyPress)`];
-		ac5eConfig.returnEarly = settings.keypressOverrides;
-		if (ac5eConfig.returnEarly) {
-			config.advantage = true;
-			config.disadvantage = false;
-		}
-	} else if (ac5eConfig.preAC5eConfig.disKey) {
-		ac5eConfig.subject.disadvantage = [`${roller} (keyPress)`];
-		ac5eConfig.returnEarly = settings.keypressOverrides;
-		if (ac5eConfig.returnEarly) {
-			config.advantage = false;
-			config.disadvantage = true;
-		}
-	} else if (ac5eConfig.preAC5eConfig.critKey) {
-		ac5eConfig.subject.critical = [`${roller} (keyPress)`];
-		ac5eConfig.returnEarly = settings.keypressOverrides;
-	}
+	const { skipDialogAdvantage, skipDialogDisadvantage, skipDialogNormal } = ac5eConfig.preAC5eConfig;
 
-	if (ac5eConfig.returnEarly) {
-		if (settings.debug) console.warn('AC5E_getConfig', { ac5eConfig });
+	const returnEarly = skipDialogNormal && (skipDialogAdvantage || skipDialogDisadvantage);
+
+	if (returnEarly) {
+		ac5eConfig.returnEarly = true;
+		if (skipDialogAdvantage) {
+			if (hookType === 'damage') {
+				config.isCritical = true;
+				ac5eConfig.subject.critical.push(_localize('AC5E.OverrideCritical'));
+			} else {
+				config.advantage = true;
+				ac5eConfig.subject.advantage.push(_localize('AC5E.OverrideAdvantage'));
+				config.disadvantage = false;
+			}
+		}
+		if (skipDialogDisadvantage) {
+			if (hookType === 'damage') {
+				config.isCritical = false;
+				ac5eConfig.subject.noCritical.push(_localize('AC5E.OverrideNoCritical'));
+			} else {
+				config.disadvantage = true;
+				ac5eConfig.subject.disadvantage.push(_localize('AC5E.OverrideDisadvantage'));
+				config.advantage = false;
+			}
+		}
+		if (settings.debug) console.warn('AC5E_getConfig returning early', { ac5eConfig });
 		return ac5eConfig;
+	} else {
+		if (skipDialogAdvantage) {
+			if (hookType === 'damage') ac5eConfig.subject.critical.push(_localize('AC5E.CriticalKeypress'));
+			else ac5eConfig.subject.advantage.push(_localize('AC5E.AdvantageKeypress'));
+		}
+		if (skipDialogDisadvantage) {
+			if (hookType === 'damage') ac5eConfig.subject.noCritical.push(_localize('AC5E.NoCriticalKeypress'));
+			else ac5eConfig.subject.disadvantage.push(_localize('AC5E.DisadvantageKeypress'));
+		}
 	}
 
 	// const actorSystemRollMode = [];
 	const { adv, dis } = getSystemRollConfig({ actor, options, hookType, ac5eConfig });
 
-	if (!options.preConfigInitiative && ((config.advantage && roller !== 'MidiQOL') || ac5eConfig.preAC5eConfig.midiOptions?.advantage) && !ac5eConfig.preAC5eConfig.advKey && !adv) ac5eConfig.subject.advantage.push(`${roller} (flags)`);
-	if (!options.preConfigInitiative && ((config.disadvantage && roller !== 'MidiQOL') || ac5eConfig.preAC5eConfig.midiOptions?.disadvantage) && !ac5eConfig.preAC5eConfig.disKey && !dis) ac5eConfig.subject.disadvantage.push(`${roller} (flags)`);
-	if (!options.preConfigInitiative && (config.isCritical || ac5eConfig.preAC5eConfig.midiOptions?.isCritical) && !ac5eConfig.preAC5eConfig.critKey) ac5eConfig.subject.critical.push(`${roller} (flags)`);
+	if (!options.preConfigInitiative) {
+		if (hookType !== 'damage' && !skipDialogAdvantage && !adv && ((config.advantage && !midiRoller) || ac5eConfig.preAC5eConfig.midiOptions?.advantage || config?.workflow?.attackAdvAttribution?.size)) {
+			if (midiRoller) {
+				const attribution = Array.from(config.workflow?.attackAdvAttribution || {})
+					?.filter((attr) => attr.includes('ADV:'))
+					.map((attr) => attr.replace('ADV:', 'MidiQOL: '));
+				ac5eConfig.subject.advantage.push(...attribution);
+			} else ac5eConfig.subject.advantage.push(`${roller} ${_localize('AC5E.Flags')}`);
+		}
+		if (hookType !== 'damage' && !skipDialogAdvantage && !dis && ((config.disadvantage && !midiRoller) || ac5eConfig.preAC5eConfig.midiOptions?.disadvantage || config?.workflow?.attackAdvAttribution?.size)) {
+			if (midiRoller) {
+				const attribution = Array.from(config.workflow?.attackAdvAttribution || {})
+					?.filter?.((attr) => attr.includes('DIS:'))
+					.map((attr) => attr.replace('DIS:', 'MidiQOL: '));
+				ac5eConfig.subject.disadvantage.push(...attribution);
+			} else ac5eConfig.subject.disadvantage.push(`${roller} ${_localize('AC5E.Flags')}`);
+		}
+		if (!skipDialogAdvantage && (config.isCritical || ac5eConfig.preAC5eConfig.midiOptions?.isCritical)) ac5eConfig.subject.critical.push(`${roller} ${_localize('AC5E.Flags')}`);
+	}
 
 	if (settings.debug) console.warn('AC5E_getConfig', { ac5eConfig });
 	return ac5eConfig;
 }
 
-function collectRollMode({ actor, mode, max, min, hookType, typeLabel, ac5eConfig, systemMode }) {
+function collectRollMode({ actor, mode, max, min, hookType, typeLabel, ac5eConfig, systemMode, type, modeCounts }) {
 	const capitalizeHook = hookType.capitalize();
 	if (mode > 0) {
-		systemMode.adv++;
-		if (!actor.hasConditionEffect(`ability${capitalizeHook}Advantage`)) ac5eConfig.subject.advantageNames.add(_localize(typeLabel));
+		if (modeCounts?.override > 0) {
+			ac5eConfig.subject.forcedAdvantage = [_localize('AC5E.ForcedAdvantage')];
+			systemMode.override = modeCounts.override;
+		} else if (modeCounts?.disadvantages.suppressed) {
+			ac5eConfig.subject.noDisadvantage = [_localize('AC5E.NoDisadvantage')];
+			systemMode.suppressed = 'noDis';
+		} else {
+			systemMode.adv++;
+			if (!actor.hasConditionEffect(`ability${capitalizeHook}Advantage`)) ac5eConfig.subject.advantageNames.add(_localize(typeLabel));
+			if (type === 'init' && !actor.hasConditionEffect('initiativeAdvantage')) ac5eConfig.subject.advantageNames.add(_localize(typeLabel));
+		}
 	}
 	if (mode < 0) {
-		systemMode.dis++;
-		//Do not add System Mode for stealth disadvantage; already added by name
-		if (!actor.hasConditionEffect(`ability${capitalizeHook}Disadvantage`) && ac5eConfig?.options?.skill !== 'ste') ac5eConfig.subject.disadvantageNames.add(_localize(typeLabel));
+		if (modeCounts?.override < 0) {
+			ac5eConfig.subject.forcedDisadvantage = [_localize('AC5E.ForcedDisadvantage')];
+			systemMode.override = modeCounts.override;
+		} else if (modeCounts?.advantages.suppressed) {
+			ac5eConfig.subject.noAdvantage = [_localize('AC5E.NoAdvantage')];
+			systemMode.suppressed = 'noAdv';
+		} else {
+			systemMode.dis++;
+			//Do not add System Mode for stealth disadvantage; already added by name
+			if (!actor.hasConditionEffect(`ability${capitalizeHook}Disadvantage`) && ac5eConfig?.options?.skill !== 'ste') ac5eConfig.subject.disadvantageNames.add(_localize(typeLabel));
+			if (type === 'init' && !actor.hasConditionEffect('initiativeDisadvantage')) ac5eConfig.subject.disadvantageNames.add(_localize(typeLabel));
+		}
 	}
 	if (max) ac5eConfig.subject.modifiers.push(`${_localize('DND5E.ROLL.Range.Maximum')} (${max})`);
 	if (min) ac5eConfig.subject.modifiers.push(`${_localize('DND5E.ROLL.Range.Minimum')} (${min})`);
@@ -818,32 +919,33 @@ function getSystemRollConfig({ actor, options, hookType, ac5eConfig }) {
 	if (hookType === 'check') {
 		if (skill) {
 			if (skill === 'ste' && autoArmorChecks.hasStealthDisadvantage) ac5eConfig.subject.disadvantageNames.add(`${_localize(autoArmorChecks.hasStealthDisadvantage)} (${_localize('ItemEquipmentStealthDisav')})`);
-			const { mode, max, min } = getActorSkillRollObject({ actor, skill });
-			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode });
+			const { mode, max, min, modeCounts } = getActorSkillRollObject({ actor, skill });
+			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode, modeCounts });
 		}
 		if (tool) {
-			const { mode, max, min } = getActorToolRollObject({ actor, tool });
-			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode });
+			const { mode, max, min, modeCounts } = getActorToolRollObject({ actor, tool });
+			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode, modeCounts });
 		}
+		if (options.isInitiative) {
+			const { mode, max, min, modeCounts } = getConcOrDeathOrInitRollObject({ actor, type: 'init' });
+			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode, type: 'init', modeCounts });
+		}
+	}
+	if (ability && ['check', 'save'].includes(hookType)) {
 		if (options.isConcentration) {
 			if (_hasItem(actor, _localize('AC5E.WarCaster'))) {
 				ac5eConfig.subject.advantage.push(_localize('AC5E.WarCaster'));
 			}
-			const { mode, max, min } = getConcOrDeathOrInitRollObject({ actor, type: 'concentration' });
-			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode });
+			const { mode, max, min, modeCounts } = getConcOrDeathOrInitRollObject({ actor, type: 'concentration' });
+			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode, modeCounts });
+		} else {
+			const { mode, max, min, modeCounts } = getActorAbilityRollObject({ actor, ability, hookType });
+			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode, modeCounts });
 		}
-		if (options.isInitiative) {
-			const { mode, max, min } = getConcOrDeathOrInitRollObject({ actor, type: 'init' });
-			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode });
-		}
-	}
-	if (ability && ['check', 'save'].includes(hookType)) {
-		const { mode, max, min } = getActorAbilityRollObject({ actor, ability, hookType });
-		collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode });
 	}
 	if (options.isDeathSave && hookType === 'save') {
-		const { mode, max, min } = getConcOrDeathOrInitRollObject({ actor, type: 'death' });
-		collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode });
+		const { mode, max, min, modeCounts } = getConcOrDeathOrInitRollObject({ actor, type: 'death' });
+		collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode, modeCounts });
 	}
 	if (autoArmorChecks.notProficient && ['dex', 'str'].includes(ability)) {
 		ac5eConfig.subject.disadvantageNames.add(`${_localize(autoArmorChecks.notProficient)} (${_localize('NotProficient')})`);
@@ -1049,7 +1151,7 @@ export function _getEffectOriginToken(effect /* ActiveEffect */, type = 'id' /* 
 	}
 
 	if (!actor) return undefined;
-	const token = actor.getActiveTokens()[0];
+	const token = actor.token?.object || actor.getActiveTokens()[0];
 	if (!token) return undefined;
 
 	switch (type) {
@@ -1124,9 +1226,8 @@ export function _raceOrType(actor, dataType = 'race') {
 export function _generateAC5eFlags() {
 	const moduleFlagScope = `flags.${Constants.MODULE_ID}`;
 	const moduleFlags = [`${moduleFlagScope}.crossbowExpert`, `${moduleFlagScope}.sharpShooter`, `${moduleFlagScope}.attack.criticalThreshold`, `${moduleFlagScope}.grants.attack.criticalThreshold`, `${moduleFlagScope}.aura.attack.criticalThreshold`, `${moduleFlagScope}.damage.extraDice`, `${moduleFlagScope}.grants.damage.extraDice`, `${moduleFlagScope}.aura.damage.extraDice`, `${moduleFlagScope}.modifyAC`, `${moduleFlagScope}.grants.modifyAC`, `${moduleFlagScope}.aura.modifyAC`];
-
 	// const actionTypes = ["ACTIONTYPE"];//["attack", "damage", "check", "concentration", "death", "initiative", "save", "skill", "tool"];
-	const modes = ['advantage', 'bonus', 'critical', 'disadvantage', 'fail', 'fumble', 'modifier', 'modifyDC', 'success'];
+	const modes = ['advantage', 'bonus', 'critical', 'disadvantage', 'fail', 'fumble', 'modifier', 'modifyDC', 'noAdvantage', 'noCritical', 'noDisadvantage', 'success'];
 	const types = ['source', 'grants', 'aura'];
 	for (const type of types) {
 		for (const mode of modes) {
@@ -1180,15 +1281,15 @@ export function _getValidColor(color, fallback, user) {
  *  - Math.* and shorthand helpers (min, max, floor, etc.)
  *  - Fails safely to false if evaluation breaks
  */
-export function _ac5eSafeEval({ expression, sandbox = {}, mode = 'condition' }) {
+export function _ac5eSafeEval({ expression, sandbox = {}, mode = 'condition', debug }) {
 	if (!expression || typeof expression !== 'string') return undefined;
 	if (expression.includes('game') || expression.includes('canvas')) throw new Error(`Roll.safeEval expression cannot contain game/canvas.`);
 
-	const debugEnabled = settings?.debug || ac5e?.logEvaluationData;
-	const debugLog = debugEnabled ? console.warn : console.debug;
+	const debugLog = settings?.debug || ac5e?.debugEvaluations ? console.warn : console.debug;
+	debug.log = debugLog;
 
-	if (mode === 'condition') return evaluateCondition(expression, sandbox, debugLog);
-	if (mode === 'formula') return prepareRollFormula(expression, sandbox, debugLog);
+	if (mode === 'condition') return evaluateCondition(expression, sandbox, debug);
+	if (mode === 'formula') return prepareRollFormula(expression, sandbox, debug);
 	throw new Error(`Invalid mode for _ac5eSafeEval: ${mode}`);
 }
 
@@ -1199,18 +1300,21 @@ export function _ac5eActorRollData(token) {
 	actorData.currencyWeight = actor.system.currencyWeight;
 	actorData.effects = actor.appliedEffects;
 	actorData.equippedItems = { names: [], identifiers: [] };
-	for (const item of actor.items) {
-		if (item?.system?.equipped) {
-			actorData.equippedItems.names.push(item.name);
-			actorData.equippedItems.identifiers.push(item.identifier);
+	actorData.items = actor.items?.map((i) => ({ ...i.getRollData().item, uuid: i.uuid })) ?? [];
+	for (const i of actorData.items) {
+		if (i.equipped) {
+			actorData.equippedItems.names.push(i.name);
+			actorData.equippedItems.identifiers.push(i.identifier);
 		}
 	}
-	actorData.hasArmor = !!actorData.attributes.ac?.equippedArmor;
+	actorData.level = actorData.details?.level || actorData.details?.cr;
+	actorData.levelCr = actorData.level;
+	actorData.hasArmor = !!actorData.attributes?.ac?.equippedArmor;
 	if (actorData.hasArmor) actorData[`hasArmor${actorData.attributes.ac.equippedArmor.system.type.value.capitalize()}`] = true;
-	actorData.hasShield = !!actorData.attributes.ac?.equippedShield;
+	actorData.hasShield = !!actorData.attributes?.ac?.equippedShield;
 	actorData.type = actor.type;
 	actorData.canMove = Object.values(actor.system?.attributes?.movement || {}).some((v) => typeof v === 'number' && v);
-	actorData.creatureType = Object.values(_raceOrType(actor, 'all'));
+	actorData.creatureType = Array.from(new Set(Object.values(_raceOrType(actor, 'all')).filter(Boolean)));
 	actorData.token = token;
 	actorData.tokenSize = token.document.width * token.document.height;
 	actorData.tokenElevation = token.document.elevation;
@@ -1253,7 +1357,8 @@ export function _createEvaluationSandbox({ subjectToken, opponentToken, options 
 	sandbox.targetId = opponentToken?.id;
 	/* end of backwards compatibility */
 
-	sandbox.activity = activity?.getRollData().activity || {};
+	const activityData = activity?.getRollData?.()?.activity || {};
+	sandbox.activity = activityData;
 	sandbox.ammunition = options.ammunition;
 	sandbox.ammunitionName = options.ammunition?.name;
 	sandbox.consumptionItemName = {};
@@ -1287,19 +1392,20 @@ export function _createEvaluationSandbox({ subjectToken, opponentToken, options 
 	sandbox.damageTypes = options.damageTypes;
 	sandbox.defaultDamageType = options.defaultDamageType;
 	if (!foundry.utils.isEmpty(options.damageTypes)) foundry.utils.mergeObject(sandbox, options.damageTypes); //backwards compatibility for damagetypes directly in the sandbox
-	//activity data
-	const activityData = sandbox.activity;
 	sandbox.activity.damageTypes = options.damageTypes;
 	sandbox.activity.defaultDamageType = options.defaultDamageType;
-
 	sandbox.activity.attackMode = options.attackMode;
 	sandbox.activity.mastery = options.mastery;
 	if (activity?.actionType) sandbox[activity.actionType] = true;
+	if (activity?.attack?.type) {
+		sandbox[activity.attack.type.value] = true;
+		sandbox[activity.attack.type.classification] = true;
+	}
 	if (!!activityData.activation?.type) sandbox[activityData.activation.type] = true;
 	if (activityData?.type) sandbox[activityData.type] = true;
 
 	//item data
-	const itemData = item?.getRollData().item || {};
+	const itemData = item?.getRollData?.()?.item || {};
 	sandbox.item = itemData;
 	sandbox.item.uuid = item?.uuid;
 	sandbox.item.id = item?.id;
@@ -1313,12 +1419,12 @@ export function _createEvaluationSandbox({ subjectToken, opponentToken, options 
 	sandbox.item.hasLimitedUses = item?.system?.hasLimitedUses;
 	sandbox.item.isHealing = item?.system?.isHealing;
 	sandbox.item.isEnchantment = item?.system?.isEnchantment;
-	sandbox.item.transferredEffects = item?.transferredEffects;	
+	sandbox.item.transferredEffects = item?.transferredEffects;
 	sandbox.itemProperties = {};
-	if (itemData) {
+	if (item) {
 		sandbox[item.type] = true; // this is under Item5e#system#type 'weapon'/'spell' etc
-		sandbox[itemData.type.value] = true;
-		if (itemData.spell) sandbox[itemData.school] = true;
+		if (!!itemData.type?.value) sandbox[itemData.type.value] = true;
+		if (itemData.school) sandbox[itemData.school] = true;
 		const ammoProperties = sandbox.ammunition?.system?.properties;
 		if (ammoProperties?.length && itemData?.properties) ammoProperties.forEach((p) => itemData.properties.add(p));
 		itemData.properties?.filter((p) => (sandbox.itemProperties[p] = true) && (sandbox[p] = true));
@@ -1498,4 +1604,13 @@ export function _getItemOrActivity(itemID, activityID, actor) {
 	if (!activityID) return item;
 
 	return item.system?.activities?.find((a) => a.name === activityID || a.type === activityID || a.identifier === activityID || a.id === activityID || a.uuid === activityID) || {};
+}
+
+export function _getTokenFromActor(actor, notify) {
+	let token;
+	const tokenId = ChatMessage.getSpeaker({ actor })?.token;
+	if (tokenId) token = canvas.tokens.get(tokenId);
+	else token = null;
+	if (!token && notify) ui.notifications.warn(_localize('AC5E.TokenlessActorWarning'));
+	return token;
 }

@@ -1,8 +1,10 @@
-import { _renderHijack, _renderSettings, _rollFunctions, _overtimeHazards } from './ac5e-hooks.mjs';
 import { _autoRanged, _autoArmor, _activeModule, _createEvaluationSandbox, checkNearby, _generateAC5eFlags, _getDistance, _getItemOrActivity, _raceOrType, _canSee } from './ac5e-helpers.mjs';
+import { _renderHijack, _renderSettings, _rollFunctions, _overtimeHazards } from './ac5e-hooks.mjs';
+import { _migrate } from './ac5e-migrations.mjs';
+import { _gmDocumentUpdates, _gmEffectDeletions } from './ac5e-queries.mjs';
 import Constants from './ac5e-constants.mjs';
 import Settings from './ac5e-settings.mjs';
-export let scopeUser, lazySandbox;
+export let scopeUser, lazySandbox, ac5eQueue;
 let daeFlags;
 
 Hooks.once('init', ac5eRegisterOnInit);
@@ -11,6 +13,7 @@ Hooks.once('ready', ac5eReady);
 
 /* SETUP FUNCTIONS */
 function ac5eRegisterOnInit() {
+	registerQueries();
 	daeFlags = _generateAC5eFlags();
 	Hooks.on('dae.setFieldData', (fieldData) => {
 		fieldData['AC5E'] = daeFlags;
@@ -33,12 +36,14 @@ function ac5ei18nInit() {
 }
 
 function ac5eReady() {
+	ac5eQueue = new foundry.utils.Semaphore();
 	if (_activeModule('midi-qol')) {
 		Hooks.once('midi-qol.midiReady', ac5eSetup); //added midi-qol ready hook, so that ac5e registers hooks after MidiQOL.
 	} else {
 		ac5eSetup();
 	}
 	if (_activeModule('dae')) DAE.addAutoFields(daeFlags);
+	_migrate();
 }
 
 function ac5eSetup() {
@@ -54,6 +59,9 @@ function ac5eSetup() {
 		{ id: 'dnd5e.preRollSavingThrow', type: 'save' },
 		{ id: 'dnd5e.preUseActivity', type: 'use' },
 	];
+	const foundryHooks = [
+		{ id: 'preCreateItem', type: 'preCreateItem' },
+	]
 	const renderHooks = [
 		//renders
 		{ id: 'dnd5e.renderChatMessage', type: 'chat' },
@@ -61,7 +69,7 @@ function ac5eSetup() {
 		{ id: 'renderD20RollConfigurationDialog', type: 'd20Dialog' },
 		{ id: 'renderDamageRollConfigurationDialog', type: 'damageDialog' },
 	];
-	for (const hook of actionHooks.concat(renderHooks)) {
+	for (const hook of actionHooks.concat(renderHooks).concat(foundryHooks)) {
 		const hookId = Hooks.on(hook.id, (...args) => {
 			if (renderHooks.some((h) => h.id === hook.id)) {
 				const [render, element] = args;
@@ -74,6 +82,9 @@ function ac5eSetup() {
 				} else if (hook.id === 'dnd5e.preConfigureInitiative') {
 					const [actor, rollConfig] = args;
 					if (settings.debug) console.warn(hook.id, { actor, rollConfig });
+				} else if (hook.id === 'preCreateItem') {
+					const [item, updates] = args;
+					if (settings.debug) console.warn(hook.id, { item, updates });
 				} else {
 					const [config, dialog, message] = args;
 					if (settings.debug) console.warn(hook.id, { config, dialog, message });
@@ -100,6 +111,7 @@ function ac5eSetup() {
 	globalThis[Constants.MODULE_NAME_SHORT].evaluationData = _createEvaluationSandbox;
 	globalThis[Constants.MODULE_NAME_SHORT].getItemOrActivity = _getItemOrActivity;
 	globalThis[Constants.MODULE_NAME_SHORT].logEvaluationData = false;
+	globalThis[Constants.MODULE_NAME_SHORT].debugEvaluations = false;
 	Object.defineProperty(globalThis[Constants.MODULE_NAME_SHORT], '_target', {
 		get() {
 			return game?.user?.targets?.first();
@@ -174,4 +186,10 @@ function initializeSandbox() {
 	});
 
 	console.log('AC5E Base sandbox initialized', lazySandbox);
+}
+
+function registerQueries() {
+	CONFIG.queries[Constants.MODULE_ID] = {};
+	CONFIG.queries[Constants.GM_DOCUMENT_UPDATES] = _gmDocumentUpdates;
+	CONFIG.queries[Constants.GM_EFFECT_DELETIONS] = _gmEffectDeletions;
 }

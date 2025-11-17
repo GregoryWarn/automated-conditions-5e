@@ -1,4 +1,4 @@
-import { _activeModule, _calcAdvantageMode, _collectActivityDamageTypes, _collectRollDamageTypes, _getActionType, _getActivityEffectsStatusRiders, _getDistance, _getValidColor, _hasAppliedEffects, _hasItem, _hasStatuses, _localize, _i18nConditions, _autoArmor, _autoRanged, _getTooltip, _getConfig, _setAC5eProperties, _systemCheck, _hasValidTargets } from './ac5e-helpers.mjs';
+import { _activeModule, _calcAdvantageMode, _collectActivityDamageTypes, _collectRollDamageTypes, _getActionType, _getActivityEffectsStatusRiders, _getDistance, _getTokenFromActor, _getValidColor, _hasAppliedEffects, _hasItem, _hasStatuses, _localize, _i18nConditions, _autoArmor, _autoRanged, _getTooltip, _getConfig, _setAC5eProperties, _systemCheck, _hasValidTargets } from './ac5e-helpers.mjs';
 import Constants from './ac5e-constants.mjs';
 import Settings from './ac5e-settings.mjs';
 import { _ac5eChecks } from './ac5e-setpieces.mjs';
@@ -24,6 +24,9 @@ export function _rollFunctions(hook, ...args) {
 	} else if (hook === 'init') {
 		const [actor, rollConfig] = args;
 		return _preConfigureInitiative(actor, rollConfig, hook);
+	} else if (hook === 'preCreateItem') {
+		const [item, updates] = args;
+		return _preCreateItem(item, updates, hook);
 	}
 }
 function getMessageData(config, hook) {
@@ -47,16 +50,16 @@ function getMessageData(config, hook) {
 			options.d20.attackRollD20 = config?.workflow?.d20AttackRoll;
 			options.d20.hasAdvantage = config?.workflow?.advantage;
 			options.d20.hasDisadvantage = config?.workflow?.disadvantage;
-			options.d20.isCritical = config?.midiOptions?.isCritical;
-			options.d20.isFumble = config?.midiOptions?.isFumble;
+			options.d20.isCritical = config?.midiOptions?.isCritical ?? config?.workflow?.isCritical;
+			options.d20.isFumble = config?.midiOptions?.isFumble ?? config?.workflow?.isFumble;
 		} else {
-			const findAttackRoll = game.messages.filter((m) => m.flags?.dnd5e?.originatingMessage === messageId && m.flags?.dnd5e?.roll?.type === 'attack').at(-1)?.rolls[0];
-			options.d20.attackRollTotal = findAttackRoll?.total;
-			options.d20.attackRollD20 = findAttackRoll?.d20?.total;
-			options.d20.hasAdvantage = findAttackRoll?.options?.advantageMode > 0;
-			options.d20.hasDisadvantage = findAttackRoll?.options?.advantageMode < 0;
-			options.d20.isCritical = findAttackRoll?.options?.isCritical ?? config?.isCritical;
-			options.d20.isFumble = findAttackRoll?.options?.isFumble ?? config?.isFumble;
+			const findRoll0 = game.messages.filter((m) => m.flags?.dnd5e?.originatingMessage === messageId && m.flags?.dnd5e?.roll?.type !== 'damage').at(-1)?.rolls[0];
+			options.d20.attackRollTotal = findRoll0?.total;
+			options.d20.attackRollD20 = findRoll0?.d20?.total;
+			options.d20.hasAdvantage = findRoll0?.options?.advantageMode > 0;
+			options.d20.hasDisadvantage = findRoll0?.options?.advantageMode < 0;
+			options.d20.isCritical = findRoll0?.isCritical ?? findRoll0?.options?.isCritical ?? config?.isCritical;
+			options.d20.isFumble = findRoll0?.isFumble ?? findRoll0?.options?.isFumble ?? config?.isFumble;
 		}
 	}
 	options.messageId = messageId;
@@ -72,6 +75,16 @@ function getTargets(message) {
 	const messageTargets = message?.flags?.dnd5e?.targets;
 	if (messageTargets?.length) return messageTargets;
 	return [...game.user.targets].map((target) => ({ ac: target.actor?.system?.attributes?.ac?.value ?? null, uuid: target.actor?.uuid, tokenUuid: target.document.uuid, name: target.name, img: target.document.texture.src }));
+}
+
+export function _preCreateItem(item, updates) {
+	// if (_activeModule('dnd5e-scriptlets') && game.settings.get('dnd5e-scriptlets', 'UpdateCreatedOrigins')) return; //@to-do: integration with scriptlets when it's fixed
+	const itemUuid = item.uuid;
+	if (!itemUuid) return;
+	const effects = foundry.utils.duplicate(item._source.effects);
+	if (!effects.length) return;
+	for (const e of effects) if (e.origin && e.origin !== itemUuid) e.origin = itemUuid;
+	item.updateSource({ effects });
 }
 
 export function _preUseActivity(activity, usageConfig, dialogConfig, messageConfig, hook) {
@@ -108,7 +121,7 @@ export function _preUseActivity(activity, usageConfig, dialogConfig, messageConf
 	}
 
 	// to-do: check how can we add logic for testing all these based on selected types of activities and settings.needsTarget, to allow for evaluation of conditions and flags from
-	const sourceToken = sourceActor.token?.object ?? sourceActor.getActiveTokens()[0];
+	const sourceToken = _getTokenFromActor(sourceActor, true);
 
 	//to-do: rework this to properly check for fail flags and fail use status effects
 	// if (targets.size) {
@@ -178,8 +191,8 @@ export function _preRollSavingThrow(config, dialog, message, hook) {
 	const messageType = message?.flags?.dnd5e?.messageType;
 	const chatMessage = message?.document;
 
-	const subjectTokenId = speaker?.token ?? subject?.token?.id ?? subject?.getActiveTokens()[0]?.id;
-	const subjectToken = canvas.tokens.get(subjectTokenId);
+	const subjectToken = _getTokenFromActor(subject, true);
+	const subjectTokenId = subjectToken?.id;
 	if (attackingToken) options.distance = _getDistance(attackingToken, subjectToken);
 	let ac5eConfig = _getConfig(config, dialog, hook, subjectTokenId, attackingToken?.id, options);
 	if (ac5eConfig.returnEarly) {
@@ -207,8 +220,8 @@ export function _preRollAbilityCheck(config, dialog, message, hook, reEval) {
 	options.targets = messageTargets;
 	_collectActivityDamageTypes(activity, options); //adds options.defaultDamageType, options.damageTYpes
 
-	const subjectTokenId = speaker?.token ?? subject?.token?.id ?? subject?.getActiveTokens()[0]?.id;
-	const subjectToken = canvas.tokens.get(subjectTokenId);
+	const subjectToken = _getTokenFromActor(subject, true);
+	const subjectTokenId = subjectToken?.id;
 	let opponentToken;
 	//to-do: not ready for this yet. The following line would make it so checks would be perfomred based on target's data/effects
 	// if (game.user.targets.size === 1) opponentToken = game.user.targets.first() !== subjectToken ? game.user.targets.first() : undefined;
@@ -246,7 +259,7 @@ export function _preRollAttack(config, dialog, message, hook, reEval) {
 	//these targets get the uuid of either the linked Actor or the TokenDocument if unlinked. Better use user targets
 	//const targets = [...game.user.targets];
 	const targets = game.user?.targets;
-	const sourceToken = canvas.tokens.get(sourceTokenID); //Token5e
+	const sourceToken = _getTokenFromActor(sourceActor, true);
 	let singleTargetToken = targets?.first();
 	const needsTarget = settings.needsTarget;
 	//to-do: add an override for 'force' and a keypress, so that one could "target" unseen tokens. Default to source then probably?
@@ -256,13 +269,13 @@ export function _preRollAttack(config, dialog, message, hook, reEval) {
 		else singleTargetToken = undefined;
 	}
 	if (singleTargetToken) options.distance = _getDistance(sourceToken, singleTargetToken);
-	let ac5eConfig = _getConfig(config, dialog, hook, sourceTokenID, singleTargetToken?.id, options, reEval);
+	let ac5eConfig = _getConfig(config, dialog, hook, sourceToken?.id, singleTargetToken?.id, options, reEval);
 	if (ac5eConfig.returnEarly) return _setAC5eProperties(ac5eConfig, config, dialog, message);
 	ac5eConfig = _ac5eChecks({ ac5eConfig, subjectToken: sourceToken, opponentToken: singleTargetToken });
 
 	let nearbyFoe, inRange, range;
-	if (settings.autoRangedCombined !== 'off' && singleTargetToken) {
-		({ nearbyFoe, inRange, range } = _autoRanged(activity, sourceToken, singleTargetToken));
+	if (!foundry.utils.isEmpty(settings.autoRangeChecks) && singleTargetToken) {
+		({ nearbyFoe, inRange, range } = _autoRanged(activity, sourceToken, singleTargetToken, options));
 		//Nearby Foe
 		if (nearbyFoe) {
 			ac5eConfig.subject.disadvantage.push(_localize('AC5E.NearbyFoe'));
@@ -312,8 +325,8 @@ export function _preRollDamage(config, dialog, message, hook, reEval) {
 	options.targets = messageTargets;
 	_collectRollDamageTypes(rolls, options); //adds options.defaultDamageType, options.damageTypes
 
-	const sourceTokenID = speaker.token;
-	const sourceToken = canvas.tokens.get(sourceTokenID);
+	const sourceToken = _getTokenFromActor(sourceActor, true);
+	const sourceTokenId = sourceToken?.id;
 	const targets = game.user?.targets;
 	let singleTargetToken = targets?.first();
 	const needsTarget = settings.needsTarget;
@@ -325,7 +338,7 @@ export function _preRollDamage(config, dialog, message, hook, reEval) {
 		else singleTargetToken = undefined;
 	}
 	if (singleTargetToken) options.distance = _getDistance(sourceToken, singleTargetToken);
-	let ac5eConfig = _getConfig(config, dialog, hook, sourceTokenID, singleTargetToken?.id, options, reEval);
+	let ac5eConfig = _getConfig(config, dialog, hook, sourceTokenId, singleTargetToken?.id, options, reEval);
 	if (ac5eConfig.returnEarly) return _setAC5eProperties(ac5eConfig, config, dialog, message);
 	ac5eConfig = _ac5eChecks({ ac5eConfig, subjectToken: sourceToken, opponentToken: singleTargetToken });
 
@@ -657,31 +670,43 @@ export function _preConfigureInitiative(subject, rollConfig) {
 	const ability = initAbility === '' ? 'dex' : initAbility;
 	options.ability = ability;
 	let ac5eConfig = _getConfig(config, {}, hook, subjectToken?.id, undefined, options);
+	if (ac5eConfig.returnEarly) {
+		_getTooltip(ac5eConfig);
+		const ac5eConfigObject = { [Constants.MODULE_ID]: ac5eConfig };
+		foundry.utils.mergeObject(rollConfig.options, ac5eConfigObject);
+		return ac5eConfig;
+	}
 	//to-do: match the flags or init mode with the tooltip blurb
 	//v5.1.x the flags.dnd5e.initiaiveAdv/Disadv are no more, and they are getting automatically replaced by the system with system.attributes.init.roll.mode
-	if (subject?.flags?.dnd5e?.initiativeAdv || subject.system.attributes.init.roll.mode > 0) ac5eConfig.subject.advantage.push(_localize('AC5E.FlagsInitiativeAdv')); //to-do: move to setPieces
-	if (subject?.flags?.dnd5e?.initiativeDisadv || subject.system.attributes.init.roll.mode < 0) ac5eConfig.subject.disadvantage.push(_localize('AC5E.FlagsInitiativeDisadv')); //to-do: move to setPieces
+	if (subject?.flags?.dnd5e?.initiativeAdv) ac5eConfig.subject.advantage.push(_localize('AC5E.FlagsInitiativeAdv')); //to-do: move to setPieces
+	if (subject?.flags?.dnd5e?.initiativeDisadv) ac5eConfig.subject.disadvantage.push(_localize('AC5E.FlagsInitiativeDisadv')); //to-do: move to setPieces
 	ac5eConfig = _ac5eChecks({ ac5eConfig, subjectToken, opponentToken: undefined });
 
+	if (!foundry.utils.isEmpty(ac5eConfig.subject.noAdvantage)) {
+		ac5eConfig.subject.advantage = [];
+		ac5eConfig.opponent.advantage = [];
+		ac5eConfig.subject.advantageNames = new Set();
+		ac5eConfig.opponent.advantageNames = new Set();
+	}
+	if (!foundry.utils.isEmpty(ac5eConfig.subject.noDisadvantage)) {
+		ac5eConfig.subject.disadvantage = [];
+		ac5eConfig.opponent.disadvantage = [];
+		ac5eConfig.subject.disadvantageNames = new Set();
+		ac5eConfig.opponent.disadvantageNames = new Set();
+	}
 	let advantageMode = 0;
-	if (ac5eConfig.subject.advantage.length || ac5eConfig.opponent.advantage.length) advantageMode += 1;
-	if (ac5eConfig.subject.disadvantage.length || ac5eConfig.opponent.disadvantage.length) advantageMode -= 1;
+	if (ac5eConfig.subject.advantage.length || ac5eConfig.opponent.advantage.length || ac5eConfig.subject.advantageNames.size || ac5eConfig.opponent.advantageNames.size) advantageMode += 1;
+	if (ac5eConfig.subject.disadvantage.length || ac5eConfig.opponent.disadvantage.length || ac5eConfig.subject.disadvantageNames.size || ac5eConfig.opponent.disadvantageNames.size) advantageMode -= 1;
 	if (ac5eConfig.parts.length) rollConfig.parts = rollConfig.parts.concat(ac5eConfig.parts);
 	if (advantageMode > 0) {
-		rollConfig.advantageMode = 1;
-		rollConfig.options.advantageMode = 1;
-		rollConfig.advantage = true;
-		rollConfig.disadvantage = false;
+		rollConfig.options.advantage = true;
+		rollConfig.options.disadvantage = false;
 	} else if (advantageMode < 0) {
-		rollConfig.advantageMode = -1;
-		rollConfig.options.advantageMode = -1;
-		rollConfig.advantage = false;
-		rollConfig.disadvantage = true;
+		rollConfig.options.advantage = false;
+		rollConfig.options.disadvantage = true;
 	} else if (advantageMode === 0) {
-		rollConfig.advantageMode = 0;
-		rollConfig.options.advantageMode = 0;
-		rollConfig.advantage = false;
-		rollConfig.disadvantage = false;
+		rollConfig.options.advantage = true;
+		rollConfig.options.disadvantage = true;
 	}
 
 	ac5eConfig.advantageMode = advantageMode;
@@ -834,8 +859,10 @@ function applyOrResetFormulaChanges(elem, getConfigAC5E, mode = 'apply') {
 	const hasAdv = modifiers.includes('adv') || getConfigAC5E.subject.advantage.length || getConfigAC5E.opponent.advantage.length; // adds support for flags.ac5e.damage.advantage which is recommended going forward.
 	const hasDis = modifiers.includes('dis') || getConfigAC5E.subject.disadvantage.length || getConfigAC5E.opponent.disadvantage.length;
 
-	const isCritical = getConfigAC5E.preAC5eConfig?.wasCritical ?? false;
-	const extraDiceTotal = (getConfigAC5E.extraDice ?? []).reduce((a, b) => a + b, 0) * (isCritical ? 2 : 1);
+	// const isCritical = getConfigAC5E.preAC5eConfig?.wasCritical ?? false;
+	// const extraDiceTotal = (getConfigAC5E.extraDice ?? []).reduce((a, b) => a + b, 0) * (isCritical ? 2 : 1);
+	const isCritical = getConfigAC5E.isCritical;
+	const extraDiceTotal = (getConfigAC5E.extraDice ?? []).reduce((a, b) => a + b, 0);
 
 	if (!getConfigAC5E.preservedInitialData) {
 		getConfigAC5E.preservedInitialData = {
@@ -871,7 +898,7 @@ function applyOrResetFormulaChanges(elem, getConfigAC5E, mode = 'apply') {
 			if (newCount <= 0) return `0d${sides}${existing}`;
 
 			// Dice base with suffix (applied inside the roll)
-			const diceTerm = `${newCount}d${sides}${suffix}`;
+			const diceTerm = `${isCritical ? 2 * newCount : newCount}d${sides}${suffix}`;
 
 			let term;
 			if (advDis === 'adv') term = `{${diceTerm},${diceTerm}}kh`;

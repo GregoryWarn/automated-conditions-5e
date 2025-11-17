@@ -1,3 +1,131 @@
+## 13.5110.7.5
+* Updated Italian translation by [GregoryWarn](<https://github.com/GregoryWarn>) 🤗
+
+## 13.5110.7.4
+* Migration errors quick fix
+
+## 13.5110.7.2
+* Fix for `flags.automated-conditions-5e.grants.attack.criticalThreshold` typo in DAE hints
+
+## 13.5110.7.1
+* Updated pt_BR translation by [Kharmans](<https://github.com/Kharmans>) 🤗
+
+## 13.5110.7
+* Compatibility bump Foundry v13.351
+* Allow `isCritical` and `isFumble` for all d20 rolls
+* Fix for `modeCounts` being undefined for some rolls
+* Move `autoRangeChecks` into a multi select type setting. Split checks to discreet settings:
+   * `Melee diagonal reach`: All adjacent squares count as within reach no matter the diagonal rules.
+   * `Melee out of range`: Melee attacks further than weapon reach fail.
+   * `Ranged long disadvantage`: Ranged attacks beyond short range but within long range have disadvantage.
+   * `Ranged out of range`: Ranged attacks beyond long range fail.
+   * `Ranged nearby foes`: Hostiles adjacent to attacker impose disadvantage on ranged attacks.
+* Migration for new `autoRangeChecks`
+* AC5e checks will now always override MidiQOL (if enabled) distance calculations
+* Fix for tiny targets distance calculations
+* Updated Czech translation by [Lethrendis](https://github.com/Lethrendis/) 🤗
+
+## 13.5110.6.3
+* Fix item effects' origins when added on actors from sidebar or compendiums.
+
+## 13.5110.6.2
+* Cleanup `actorData.creatureType` Array from empty or double elements.
+* `itemLimited` should be now available for non transfer active effects too.
+* Better error handling, parser returning `0` for failing to evaluate formulas, `ac5e.debugEvaluations` per client Boolean setting for quick checks. When a formula evaluation fails due to malformed user entries, the effect uuid and change key logged as a client error notification and in console.
+* Updated pt_BR translation by [Kharmans](<https://github.com/Kharmans>) 🤗
+
+## 13.5110.6.1
+ * HP related: `hp`, `hptemp` and `hpmax` (will target temporary max hp)
+    * Added `noconc` keyword for those hp updates to **not** trigger concentration checks (use by adding in the effect value `noconc` or `noconcentration` or `noconcentrationcheck` which are not case sensitive).
+  * HD related: `hdLargest`, `hdSmallest`, `hd` (for hd when consuming, will move from largest to smallest and vice versa for recovering)
+  * Abilities: `str`, `dex`, `con`, `int`, `wis`, `cha`. For example `usesCount=str, 2` will reduce the actor's Strength value by 2 forever! **Use with extra care!**
+  * Other Attributes:
+    * `exhaustion`, `inspiration`, `deathfailure`, `deathsuccess`
+    * movement: `walk`, `fly` etc **(be wary of those)**
+    * senses: `blindsight`, `darkvision`, `tremorsense`, `truesight` **(be wary of those)**
+  * Currency: `gp`, `sp` etc 
+  * Resources: `primary`, `secondary`, `tertiary`, `legact`, `legres`
+  * Spell slots: `spell1`, `spell5`, etc or `pact`
+  * Examples: 
+    * `usesCount=deathfailure,3` will *add* 3 death save fails until removed!
+    *  `usesCount=hdlargest, 2` will give back 2 used HD (largest available  for each of the two)
+    * `usesCount=hpmax, -5` will increase the actor's max hp by 5, adding 5 temp max hp until removed.
+    * `usesCount=hp, 5;noconc;` will decrease the current hp by 5 and won't trigger a conc save!
+* Fix distance checks to respect unit choices. Based on `distanceUnit = canvas.grid.distance`
+  * `nearbyFoes` checks against 1 distanceUnit.
+  * `paralyzed`, `prone` and `unconscious` check against 1 distanceUnit.
+  * `Spell Sniper 2024` adds a bonus of 12 distanceUnits if the cantrip range >= 2 * distanceUnits.
+* Post a warning if you roll from a sidebar actor without a relevant token on the scene.
+  
+## 13.5110.5.2
+* Fix for unlinked tokens `usesCount = origin` consuming from the sidebar actor
+* Fix for `usesCount` not properly identifying if a flag was supposed to alter a roll or not
+* If `usesCount` points to an Item that has a `quantity` and **no** `uses`, the quantity will be consumed
+* Updated pt_BR translation by [Kharmans](<https://github.com/Kharmans>) 🤗
+
+## 13.5110.5.1
+* Fix for `noCritical` flags not working
+
+## 13.5110.5
+* Fix for `Array.from(undefined)` throw
+* Introducing queries for updating `usesCount` of non-owned documents.
+* Added logic for using `usesCount=Item.id.Activity.id` for items owned by the actor affected by the effect.
+  * The `id` can be id, identifier or name, for example: `usesCount=Item.Longsword.Activity.attack, 2` to consume 2 uses of the activity with the identifier `attack` on an Item named Longsword.
+* Updated Italian translation by [GregoryWarn](<https://github.com/GregoryWarn>) 🤗
+
+## 13.5110.4.3
+* Correct extraDice multiplication for critical damage
+* Makes sure that normal defaultButton isn't forced
+
+## 13.5110.4.2
+* Added directly in sandbox `activity.attack.type.value` and `activity.attack.type.classification`.
+  * You can now use directly `melee`, `ranged` and `spell`, `unarmed`, `weapon` 
+* Updated pt_BR translation by [Kharmans](<https://github.com/Kharmans>) 🤗
+
+## 13.5110.4.1
+* Fix for throw when Encounter actors are on scene
+
+## 13.5110.4
+* Fix for damage type tags getting consumed after evaluation of parenthetical terms.
+
+## 13.5110.3
+* Make sure that `itemData.school` can be called directly on conditions
+* Fix for `actorData.details.level` throwing when Encounter actors are on the scene
+* English translation fixes
+
+## 13.5110.2.1
+* Guard against advantage on attack rolls, giving advantage on damage rolls by default (MidiQOL relevant).
+* Updated pt_BR translation by [Kharmans](<https://github.com/Kharmans>) 🤗
+
+## 13.5110.2
+* Rename `actorType.levelCr` to `actorType.level` foe ease of use.
+
+## 13.5110.1
+* Compatibility bump for d&d5e v5.1.10 (killing my versioning schema 🤣)
+* `noAdvantage`, `noCritical`, `noDisadvantage` flags, used to suppress the relevant modes.
+
+## 13.519.6
+* Compatibility updates for keypress overrides.
+* Compatibility updates for System flags countmodes, suppressing and overriding roll modes.
+* Fixes for MidiQOL integration.
+* Fix for concentration handling.
+* Added `actorType.items` helper, returning an Array of the relevant actor's items rollData.
+* Added `actorType.levelCr` helper, returning the level or CR of the relevant actor.
+* Updated pt_BR translation by [Kharmans](<https://github.com/Kharmans>) 🤗
+  
+## 13.519.5.1
+* Make operator removal safer
+* Proper formula mode evaluations for aura's radius
+* Updated pt_BR translation by [Kharmans](<https://github.com/Kharmans>) 🤗
+
+## 13.519.5
+* Adds dis/advantage flags for damage rolls. From now on it is suggested that you are using:
+  * `flags.automated-confitions-5e.damage.advantage` etc
+* Properly parse formulas starting with `-`
+* Remove quotes from bonuses in en.json lang file
+* Make `itemData.type.value` available as shorthand
+* Updated Italian translation by [GregoryWarn](<https://github.com/GregoryWarn>) 🤗
+
 ## 13.519.4.1
 * Backwards compatibility, fixing issues with remnant quoted parts in formulas.
 
