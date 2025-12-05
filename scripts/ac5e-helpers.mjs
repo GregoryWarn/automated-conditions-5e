@@ -14,6 +14,7 @@ const settings = new Settings();
 export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi = true, checkCollision = false, includeHeight = true) {
 	let totalDistance = Infinity;
 	const meleeDiagonals = settings.autoRangeChecks.has('meleeDiagonals');
+	let adjacent2D;
 
 	const tokenInstance = foundry.canvas.placeables.Token;
 	if (typeof tokenA === 'string') {
@@ -46,6 +47,7 @@ export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi 
 		const tokenBHexes = getHexesOnPerimeter(tokenB);
 		if (settings.debug) tokenBHexes.forEach((e) => canvas.ping(e));
 
+		outer:
 		for (const pointA of tokenAHexes) {
 			for (const pointB of tokenBHexes) {
 				if (
@@ -57,12 +59,12 @@ export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi 
 					})
 				)
 					continue;
-				const isAdjacent = canvas.grid.testAdjacency(canvas.grid.getOffset(pointA), canvas.grid.getOffset(pointB));
-				if (isAdjacent && meleeDiagonals) {
+				adjacent2D = testAdjacency(canvas.grid.getOffset(pointA), canvas.grid.getOffset(pointB));
+				if (adjacent2D && meleeDiagonals) {
 					totalDistance = gridDistance;
 					diagonals = 0;
 					spaces = 1;
-					break;
+					break outer;
 				} else {
 					const { distance: distance2D, diagonals: pathDiagonals, spaces: pathSpaces } = grid.measurePath([pointA, pointB]);
 					if (distance2D < totalDistance) {
@@ -110,6 +112,8 @@ export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi 
 			if (settings.debug) tokenASquares.forEach((s) => canvas.ping(s));
 			const tokenBSquares = getSquaresOnPerimeter(tokenB);
 			if (settings.debug) tokenBSquares.forEach((s) => canvas.ping(s));
+
+			outer:
 			for (const pointA of tokenASquares) {
 				for (const pointB of tokenBSquares) {
 					if (
@@ -121,12 +125,12 @@ export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi 
 						})
 					)
 						continue;
-					const isAdjacent = canvas.grid.testAdjacency(canvas.grid.getOffset(pointA), canvas.grid.getOffset(pointB));
-					if (isAdjacent && meleeDiagonals) {
+					adjacent2D = testAdjacency(canvas.grid.getOffset(pointA), canvas.grid.getOffset(pointB));
+					if (adjacent2D && meleeDiagonals) {
 						totalDistance = gridDistance;
 						diagonals = 0;
 						spaces = 1;
-						break;
+						break outer;
 					} else {
 						const { distance: distance2D, diagonals: pathDiagonals, spaces: pathSpaces } = grid.measurePath([pointA, pointB]);
 						if (distance2D < totalDistance) {
@@ -140,18 +144,30 @@ export function _getDistance(tokenA, tokenB, includeUnits = false, overrideMidi 
 		}
 	}
 
-	if (includeHeight) totalDistance = heightDifference(tokenA, tokenB, totalDistance, diagonals, spaces, grid);
+	if (includeHeight) totalDistance = heightDifference(tokenA, tokenB, totalDistance, diagonals, spaces, grid, adjacent2D);
 	if (settings.debug) console.log(`${Constants.MODULE_NAME_SHORT} - getDistance():`, { sourceId: tokenA.id, opponentId: tokenB.id, result: totalDistance, units });
 	if (includeUnits) return ((totalDistance * 100) | 0) / 100 + units;
 	return ((totalDistance * 100) | 0) / 100;
 }
 
-function heightDifference(tokenA, tokenB, totalDistance, diagonals, spaces, grid) {
+// reworked canvas.grid.testAdjacency to not care about diagonals
+function testAdjacency(coords1, coords2) {
+	const { i: i1, j: j1, k: k1 } = canvas.grid.getOffset(coords1);
+	const { i: i2, j: j2, k: k2 } = canvas.grid.getOffset(coords2);
+	const di = Math.abs(i1 - i2);
+	const dj = Math.abs(j1 - j2);
+	// @to-do: use 3D foundry functions instead of heightdifference dz
+	const dk = k1 !== undefined ? Math.abs(k1 - k2) : 0;
+	return Math.max(di, dj, dk) === 1;
+}
+
+function heightDifference(tokenA, tokenB, totalDistance, diagonals, spaces, grid, adjacent2D) {
 	tokenA.z0 = (tokenA.document.elevation / grid.distance) | 0;
 	tokenA.z1 = tokenA.z0 + Math.max(1, Math.min(tokenA.document.width | 0, tokenA.document.height | 0));
 	tokenB.z0 = (tokenB.document.elevation / grid.distance) | 0;
 	tokenB.z1 = tokenB.z0 + Math.max(1, Math.min(tokenB.document.width | 0, tokenB.document.height | 0));
 	const dz = tokenB.z0 >= tokenA.z1 ? tokenB.z0 - tokenA.z1 + 1 : tokenA.z0 >= tokenB.z1 ? tokenA.z0 - tokenB.z1 + 1 : 0;
+	if (Math.abs(dz) <= 1 && adjacent2D) return totalDistance;
 	if (grid.isGridless) {
 		const verticalDistance = dz * grid.distance;
 		totalDistance = dz ? Math.sqrt(totalDistance * totalDistance + verticalDistance * verticalDistance) : totalDistance;
@@ -393,6 +409,12 @@ export function _calcAdvantageMode(ac5eConfig, config, dialog, message) {
 				const finalThreshold = getAlteredTargetValueOrThreshold(roll0.options.criticalSuccess, ac5eConfig.threshold, 'critThreshold');
 				roll0.options.criticalSuccess = finalThreshold;
 				ac5eConfig.alteredCritThreshold = finalThreshold;
+			}
+			if (ac5eConfig.fumbleThreshold?.length) {
+				//for attack rolls
+				const finalThreshold = getAlteredTargetValueOrThreshold(roll0.options.criticalFailure, ac5eConfig.fumbleThreshold, 'fumbleThreshold');
+				roll0.options.criticalFailure = finalThreshold;
+				ac5eConfig.alteredFumbleThreshold = finalThreshold;
 			}
 			if (ac5eConfig.targetADC?.length) {
 				const targets = message?.data?.flags?.dnd5e?.targets;
@@ -671,7 +693,7 @@ export function _systemCheck(testVersion) {
 }
 
 export function _getTooltip(ac5eConfig = {}) {
-	const { hookType, subject, opponent, alteredCritThreshold, alteredTargetADC, initialTargetADC, tooltipObj } = ac5eConfig;
+	const { hookType, subject, opponent, alteredCritThreshold, alteredFumbleThreshold, alteredTargetADC, initialTargetADC, tooltipObj } = ac5eConfig;
 	let tooltip;
 	if (tooltipObj?.[hookType]) return tooltipObj[hookType];
 	else tooltip = '<div class="ac5e-tooltip-content">';
@@ -720,6 +742,11 @@ export function _getTooltip(ac5eConfig = {}) {
 		const translationString = game.i18n.translations.DND5E.Critical + ' ' + game.i18n.translations.DND5E.Threshold + ' ' + alteredCritThreshold;
 		addTooltip(true, `<span style="display: block; text-align: left;">${_localize(translationString)}: ${combinedArray.join(', ')}</span>`);
 	}
+	if (subject?.fumbleThreshold.length || opponent?.fumbleThreshold.length) {
+		const combinedArray = [...(subject?.fumbleThreshold ?? []), ...(opponent?.fumbleThreshold ?? [])];
+		const translationString = game.i18n.translations.AC5E.Fumble + ' ' + game.i18n.translations.DND5E.Threshold + ' ' + alteredFumbleThreshold;
+		addTooltip(true, `<span style="display: block; text-align: left;">${_localize(translationString)}: ${combinedArray.join(', ')}</span>`);
+	}
 	if (subject?.targetADC.length || opponent?.targetADC.length) {
 		const combinedArray = [...(subject?.targetADC ?? []), ...(opponent?.targetADC ?? [])];
 		let translationString = _localize(hookType === 'attack' ? 'AC5E.ModifyAC' : 'AC5E.ModifyDC');
@@ -763,6 +790,7 @@ export function _getConfig(config, dialog, hookType, tokenId, targetId, options 
 			fumble: [],
 			modifiers: [],
 			criticalThreshold: [],
+			fumbleThreshold: [],
 			targetADC: [],
 			extraDice: [],
 		},
@@ -781,6 +809,7 @@ export function _getConfig(config, dialog, hookType, tokenId, targetId, options 
 			fumble: [],
 			modifiers: [],
 			criticalThreshold: [],
+			fumbleThreshold: [],
 			targetADC: [],
 			extraDice: [],
 		},
@@ -789,6 +818,7 @@ export function _getConfig(config, dialog, hookType, tokenId, targetId, options 
 		targetADC: [],
 		extraDice: [],
 		threshold: [],
+		fumbleThreshold: [],
 		damageModifiers: [],
 		modifiers: {},
 		preAC5eConfig: {
@@ -1052,7 +1082,7 @@ export function _canSee(source, target, status) {
 	}));
 	const config = { tests, object: target };
 
-	const tokenDetectionModes = source.detectionModes;
+	const tokenDetectionModes = normalizeDetectionModes(source.detectionModes);
 	let validModes = new Set();
 
 	const sourceBlinded = source.actor?.statuses.has('blinded');
@@ -1081,6 +1111,18 @@ export function _canSee(source, target, status) {
 	if (settings.debug) console.warn(`${Constants.MODULE_NAME_SHORT}._canSee()`, { source: source?.id, target: target?.id, result: matchedModes, visionInitialized: !hasSight, sourceId: source.sourceId });
 	if (!hasSight) canvas.effects?.visionSources.delete(source.sourceId); //remove initialized vision source only if the source doesn't have sight enabled in the first place!
 	return Array.from(matchedModes).length > 0;
+}
+
+function normalizeDetectionModes(modes) {
+	if (!modes) return [];
+
+	if (!Array.isArray(modes)) {
+		return Object.entries(modes).map(([id, data]) => ({
+			id,
+			...data
+		}));
+	}
+	return modes;
 }
 
 function _initializeVision(token) {
@@ -1225,7 +1267,7 @@ export function _raceOrType(actor, dataType = 'race') {
 
 export function _generateAC5eFlags() {
 	const moduleFlagScope = `flags.${Constants.MODULE_ID}`;
-	const moduleFlags = [`${moduleFlagScope}.crossbowExpert`, `${moduleFlagScope}.sharpShooter`, `${moduleFlagScope}.attack.criticalThreshold`, `${moduleFlagScope}.grants.attack.criticalThreshold`, `${moduleFlagScope}.aura.attack.criticalThreshold`, `${moduleFlagScope}.damage.extraDice`, `${moduleFlagScope}.grants.damage.extraDice`, `${moduleFlagScope}.aura.damage.extraDice`, `${moduleFlagScope}.modifyAC`, `${moduleFlagScope}.grants.modifyAC`, `${moduleFlagScope}.aura.modifyAC`];
+	const moduleFlags = [`${moduleFlagScope}.crossbowExpert`, `${moduleFlagScope}.sharpShooter`, `${moduleFlagScope}.attack.criticalThreshold`, `${moduleFlagScope}.grants.attack.criticalThreshold`, `${moduleFlagScope}.aura.attack.criticalThreshold`, `${moduleFlagScope}.attack.fumbleThreshold`, `${moduleFlagScope}.grants.attack.fumbleThreshold`, `${moduleFlagScope}.aura.attack.fumbleThreshold`, `${moduleFlagScope}.damage.extraDice`, `${moduleFlagScope}.grants.damage.extraDice`, `${moduleFlagScope}.aura.damage.extraDice`, `${moduleFlagScope}.modifyAC`, `${moduleFlagScope}.grants.modifyAC`, `${moduleFlagScope}.aura.modifyAC`];
 	// const actionTypes = ["ACTIONTYPE"];//["attack", "damage", "check", "concentration", "death", "initiative", "save", "skill", "tool"];
 	const modes = ['advantage', 'bonus', 'critical', 'disadvantage', 'fail', 'fumble', 'modifier', 'modifyDC', 'noAdvantage', 'noCritical', 'noDisadvantage', 'success'];
 	const types = ['source', 'grants', 'aura'];

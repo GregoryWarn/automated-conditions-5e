@@ -1,3 +1,42 @@
+## 13.5200.1
+* System 5.2.0 compatibility bump
+
+## 13.5110.8.8
+* Better handle unary minus and coin flips.
+
+## 13.5110.8.7
+* If an `aura` flag doesn't include a `radius` keyword, it will apply to the whole scene no matter the distance from the source.
+* Updated pt_BR translation by [Kharmans](<https://github.com/Kharmans>) 🤗
+
+## 13.5110.8.6
+* Another fix for adjacency
+
+## 13.5110.8.5
+* Quick fix for effect deletions
+
+## 13.5110.8.4
+* Properly break when `testAdjacency` returns true
+
+## 13.5110.8.3
+* Replaced `canvas.grid.testAdjacency` calls with a custom testAdjacency function which doesn't consider diagonal rules.
+
+## 13.5110.8.2
+* Quick fix for `criticalThreshold` fumbled checks...
+
+## 13.5110.8.1
+* Added `nonEffectActor` which will be returning the data of the actor that isn't the `effectActor`. Should make the decision about which type of actor to use each time (`rollingActor` or `opponentActor`) easier 🤞. The actor that has the ac5e flag applied via the active effect, versus the one that doesn't!
+
+## 13.5110.8
+* Added `fumbleThreshold` flags for attacks
+  * `flags.automated-conditions-5e.attack.fumbleThreshold`
+  * `flags.automated-conditions-5e.grants.attack.fumbleThreshold`
+  * `flags.automated-conditions-5e.aura.attack.fumbleThreshold`
+* Added `effectActor` which will always point to the actor which has the effect applied.
+* For `usesCount=consumptionTarget, comsumptionValue`, if provided, the `consumptionValue` can be fully evaluated.
+  * Example, `usesCount=Item.amulet-of-soulcatching, -max(1, opponentActor.details.cr, opponentActor.details.level); opponentActor.statuses.dead;` will increase the uses of the Amulet by the maximum of the opponent's CR, level or 1, if the opponent has the Dead condition.
+* Added actor flags as consumption targets for `usesCount`, getting them from the effect's actor.
+  * `usesCount=flags.world.myName`
+
 ## 13.5110.7.5
 * Updated Italian translation by [GregoryWarn](<https://github.com/GregoryWarn>) 🤗
 
