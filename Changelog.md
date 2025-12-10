@@ -1,3 +1,26 @@
+## 13.5220.5
+* Fix for destructuring errors when triggering ability rolls via macros
+* Enhance current MidiQOL attacks attribution, creating a different category in the AC5e tooltips
+
+## 13.5220.4
+* Expand `usesCount` to consume from other actors too
+  * `usesCount=opponentActor.exhaustion, -1` will add one exhaustion level on the opponent of the relevant roll.
+ 
+## 13.5220.2.2
+* Fix for attackMode changes during the Attack Roll configuration dialog not properly resetting the target's AC
+
+## 13.5220.2.1
+* Allow `bonus=info` to pass through so AE names appear in tooltips without requiring additional changes.
+ * An AE named `Secret bonus` with a change value of `flags.automated-conditions-5e.save.bonus | bonus=info; once` will now show `Bonus: Secret bonus` in the tooltip without applying any actual bonus once before deleted.
+
+## 13.5220.2
+* Fix for not trimmed `once`, not working :)
+* Updated Italian translation by [GregoryWarn](<https://github.com/GregoryWarn>) 🤗
+
+## 13.5220.1
+* System 5.2.2 compatibility bump
+* Fix condition evaluation where logical expressions (||, &&) fail due to missing keyword variables
+
 ## 13.5200.1
 * System 5.2.0 compatibility bump
 

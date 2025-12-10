@@ -710,6 +710,8 @@ export function _getTooltip(ac5eConfig = {}) {
 		addTooltip(subject.critical.length, `<span style="display: block; text-align: left;">${_localize('DND5E.Critical')}: ${subject.critical.join(', ')}</span>`);
 		addTooltip(subject.noCritical.length, `<span style="display: block; text-align: left;">${_localize('AC5E.NoCritical')}: ${subject.noCritical.join(', ')}</span>`);
 		addTooltip(subjectAdvantageModes.length, `<span style="display: block; text-align: left;">${_localize('DND5E.Advantage')}: ${subjectAdvantageModes.join(', ')}</span>`);
+		addTooltip(subject.midiAdvantage.length, `<span style="display: block; text-align: left;">MidiQOL ${_localize('DND5E.Advantage')}: ${subject.midiAdvantage.join(', ')}</span>`);
+		addTooltip(subject.midiDisadvantage.length, `<span style="display: block; text-align: left;">MidiQOL ${_localize('DND5E.Disadvantage')}: ${subject.midiDisadvantage.join(', ')}</span>`);
 		addTooltip(subject.noAdvantage.length, `<span style="display: block; text-align: left;">${_localize('AC5E.NoAdvantage')}: ${subject.noAdvantage.join(', ')}</span>`);
 		addTooltip(subject.fail.length, `<span style="display: block; text-align: left;">${_localize('AC5E.Fail')}: ${subject.fail.join(', ')}</span>`);
 		addTooltip(subject.fumble.length, `<span style="display: block; text-align: left;">${_localize('AC5E.Fumble')}: ${subject.fumble.join(', ')}</span>`);
@@ -778,9 +780,11 @@ export function _getConfig(config, dialog, hookType, tokenId, targetId, options 
 		subject: {
 			advantage: [],
 			advantageNames: new Set(),
+			midiAdvantage: [],
 			noAdvantage: [],
 			disadvantage: [],
 			disadvantageNames: new Set(),
+			midiDisadvantage: [],
 			noDisadvantage: [],
 			fail: [],
 			bonus: [],
@@ -888,7 +892,10 @@ export function _getConfig(config, dialog, hookType, tokenId, targetId, options 
 			if (midiRoller) {
 				const attribution = Array.from(config.workflow?.attackAdvAttribution || {})
 					?.filter((attr) => attr.includes('ADV:'))
-					.map((attr) => attr.replace('ADV:', 'MidiQOL: '));
+					.map((attr) => {
+						if (attr.includes('.')) return attr.slice(attr.indexOf(' ') + 1).trim(); //@to-do: doublecheck if midi always uses a whitespace btw the type of Advantage and the effect name
+						else return attr.replace('ADV:', '').trim();
+					});
 				ac5eConfig.subject.advantage.push(...attribution);
 			} else ac5eConfig.subject.advantage.push(`${roller} ${_localize('AC5E.Flags')}`);
 		}
@@ -896,7 +903,10 @@ export function _getConfig(config, dialog, hookType, tokenId, targetId, options 
 			if (midiRoller) {
 				const attribution = Array.from(config.workflow?.attackAdvAttribution || {})
 					?.filter?.((attr) => attr.includes('DIS:'))
-					.map((attr) => attr.replace('DIS:', 'MidiQOL: '));
+					.map((attr) => {
+						if (attr.includes('.')) return attr.slice(attr.indexOf(' ') + 1).trim(); //@to-do: doublecheck if midi always uses a whitespace btw the type of Advantage and the effect name
+						else return attr.replace('DIS:', '').trim();
+					});
 				ac5eConfig.subject.disadvantage.push(...attribution);
 			} else ac5eConfig.subject.disadvantage.push(`${roller} ${_localize('AC5E.Flags')}`);
 		}
@@ -949,15 +959,15 @@ function getSystemRollConfig({ actor, options, hookType, ac5eConfig }) {
 	if (hookType === 'check') {
 		if (skill) {
 			if (skill === 'ste' && autoArmorChecks.hasStealthDisadvantage) ac5eConfig.subject.disadvantageNames.add(`${_localize(autoArmorChecks.hasStealthDisadvantage)} (${_localize('ItemEquipmentStealthDisav')})`);
-			const { mode, max, min, modeCounts } = getActorSkillRollObject({ actor, skill });
+			const { mode, max, min, modeCounts } = getActorSkillRollObject({ actor, skill }) || {};
 			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode, modeCounts });
 		}
 		if (tool) {
-			const { mode, max, min, modeCounts } = getActorToolRollObject({ actor, tool });
+			const { mode, max, min, modeCounts } = getActorToolRollObject({ actor, tool }) || {};
 			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode, modeCounts });
 		}
 		if (options.isInitiative) {
-			const { mode, max, min, modeCounts } = getConcOrDeathOrInitRollObject({ actor, type: 'init' });
+			const { mode, max, min, modeCounts } = getConcOrDeathOrInitRollObject({ actor, type: 'init' }) || {};
 			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode, type: 'init', modeCounts });
 		}
 	}
@@ -966,15 +976,15 @@ function getSystemRollConfig({ actor, options, hookType, ac5eConfig }) {
 			if (_hasItem(actor, _localize('AC5E.WarCaster'))) {
 				ac5eConfig.subject.advantage.push(_localize('AC5E.WarCaster'));
 			}
-			const { mode, max, min, modeCounts } = getConcOrDeathOrInitRollObject({ actor, type: 'concentration' });
+			const { mode, max, min, modeCounts } = getConcOrDeathOrInitRollObject({ actor, type: 'concentration' }) || {};
 			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode, modeCounts });
 		} else {
-			const { mode, max, min, modeCounts } = getActorAbilityRollObject({ actor, ability, hookType });
+			const { mode, max, min, modeCounts } = getActorAbilityRollObject({ actor, ability, hookType }) || {};
 			collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode, modeCounts });
 		}
 	}
 	if (options.isDeathSave && hookType === 'save') {
-		const { mode, max, min, modeCounts } = getConcOrDeathOrInitRollObject({ actor, type: 'death' });
+		const { mode, max, min, modeCounts } = getConcOrDeathOrInitRollObject({ actor, type: 'death' }) || {};
 		collectRollMode({ actor, mode, max, min, hookType, typeLabel: 'AC5E.SystemMode', ac5eConfig, systemMode, modeCounts });
 	}
 	if (autoArmorChecks.notProficient && ['dex', 'str'].includes(ability)) {
@@ -1373,7 +1383,10 @@ export function _ac5eActorRollData(token) {
 }
 
 export function _createEvaluationSandbox({ subjectToken, opponentToken, options }) {
-	const sandbox = { ...lazySandbox };
+	const sandbox = {
+		...lazySandbox,
+		_flatConstants: { ...lazySandbox._flatConstants }  // shallow copy is enough for boolean flags
+	};
 	const { ability, activity, distance, skill, tool } = options;
 	const item = activity?.item;
 	sandbox.rollingActor = {};
@@ -1429,22 +1442,22 @@ export function _createEvaluationSandbox({ subjectToken, opponentToken, options 
 	sandbox.activityName = activity ? { [activity.name]: true } : {};
 	sandbox.actionType = activity ? { [activity.actionType]: true } : {};
 	sandbox.attackMode = options.attackMode ? { [options.attackMode]: true } : {};
-	if (options.attackMode) sandbox[options.attackMode] = true; //backwards compatibility for attack mode directly in the sandbox
+	if (options.attackMode) sandbox._flatConstants[options.attackMode] = true; //backwards compatibility for attack mode directly in the sandbox
 	sandbox.mastery = options.mastery ? { [options.mastery]: true } : {};
 	sandbox.damageTypes = options.damageTypes;
 	sandbox.defaultDamageType = options.defaultDamageType;
-	if (!foundry.utils.isEmpty(options.damageTypes)) foundry.utils.mergeObject(sandbox, options.damageTypes); //backwards compatibility for damagetypes directly in the sandbox
+	if (!foundry.utils.isEmpty(options.damageTypes)) foundry.utils.mergeObject(sandbox._flatConstants, options.damageTypes); //backwards compatibility for damagetypes directly in the sandbox
 	sandbox.activity.damageTypes = options.damageTypes;
 	sandbox.activity.defaultDamageType = options.defaultDamageType;
 	sandbox.activity.attackMode = options.attackMode;
 	sandbox.activity.mastery = options.mastery;
-	if (activity?.actionType) sandbox[activity.actionType] = true;
+	if (activity?.actionType) sandbox._flatConstants[activity.actionType] = true;
 	if (activity?.attack?.type) {
-		sandbox[activity.attack.type.value] = true;
-		sandbox[activity.attack.type.classification] = true;
+		sandbox._flatConstants[activity.attack.type.value] = true;
+		sandbox._flatConstants[activity.attack.type.classification] = true;
 	}
-	if (!!activityData.activation?.type) sandbox[activityData.activation.type] = true;
-	if (activityData?.type) sandbox[activityData.type] = true;
+	if (!!activityData.activation?.type) sandbox._flatConstants[activityData.activation.type] = true;
+	if (activityData?.type) sandbox._flatConstants[activityData.type] = true;
 
 	//item data
 	const itemData = item?.getRollData?.()?.item || {};
@@ -1464,12 +1477,12 @@ export function _createEvaluationSandbox({ subjectToken, opponentToken, options 
 	sandbox.item.transferredEffects = item?.transferredEffects;
 	sandbox.itemProperties = {};
 	if (item) {
-		sandbox[item.type] = true; // this is under Item5e#system#type 'weapon'/'spell' etc
-		if (!!itemData.type?.value) sandbox[itemData.type.value] = true;
-		if (itemData.school) sandbox[itemData.school] = true;
+		sandbox._flatConstants[item.type] = true; // this is under Item5e#system#type 'weapon'/'spell' etc
+		if (!!itemData.type?.value) sandbox._flatConstants[itemData.type.value] = true;
+		if (itemData.school) sandbox._flatConstants[itemData.school] = true;
 		const ammoProperties = sandbox.ammunition?.system?.properties;
 		if (ammoProperties?.length && itemData?.properties) ammoProperties.forEach((p) => itemData.properties.add(p));
-		itemData.properties?.filter((p) => (sandbox.itemProperties[p] = true) && (sandbox[p] = true));
+		itemData.properties?.filter((p) => (sandbox.itemProperties[p] = true) && (sandbox._flatConstants[p] = true));
 	}
 
 	const combat = game.combat;
@@ -1485,9 +1498,9 @@ export function _createEvaluationSandbox({ subjectToken, opponentToken, options 
 	sandbox.ability = options.ability ? { [options.ability]: true } : {};
 	sandbox.skill = options.skill ? { [options.skill]: true } : {};
 	sandbox.tool = options.tool ? { [options.tool]: true } : {};
-	if (options?.ability) sandbox[options.ability] = true;
-	if (options?.skill) sandbox[options.skill] = true;
-	if (options?.tool) sandbox[options.tool] = true;
+	if (options?.ability) sandbox._flatConstants[options.ability] = true;
+	if (options?.skill) sandbox._flatConstants[options.skill] = true;
+	if (options?.tool) sandbox._flatConstants[options.tool] = true;
 	// in options there are options.isDeathSave options.isInitiative options.isConcentration
 	sandbox.isConcentration = options?.isConcentration;
 	sandbox.isDeathSave = options?.isDeathSave;
