@@ -34,12 +34,14 @@ export function preConfigureInitiative(subject, rollConfig, hook, deps) {
 		},
 		finalizeReturnEarly: ({ ac5eConfig: phaseConfig }) => {
 			_getTooltip(phaseConfig);
-			foundry.utils.mergeObject(rollConfig.options, { [deps.Constants.MODULE_ID]: phaseConfig });
+			// foundry.utils.mergeObject(rollConfig.options, { [deps.Constants.MODULE_ID]: phaseConfig });
+			rollConfig.options[deps.Constants.MODULE_ID] = phaseConfig;
 			return phaseConfig;
 		},
 		finalizeApplied: ({ ac5eConfig: phaseConfig }) => {
 			_getTooltip(phaseConfig);
-			foundry.utils.mergeObject(rollConfig.options, { [deps.Constants.MODULE_ID]: phaseConfig });
+			// foundry.utils.mergeObject(rollConfig.options, { [deps.Constants.MODULE_ID]: phaseConfig });
+			rollConfig.options[deps.Constants.MODULE_ID] = phaseConfig;
 			if (deps.hookDebugEnabled('preConfigureInitiativeHook')) console.warn('AC5E._preConfigureInitiative', { ac5eConfig: phaseConfig });
 			return phaseConfig;
 		},
